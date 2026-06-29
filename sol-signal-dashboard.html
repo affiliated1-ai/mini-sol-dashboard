@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOL 15m Signal — CCI / Fisher / Tenkan-sen / VWMA</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f8f8f6;
+    --surface: #ffffff;
+    --surface2: #f2f1ee;
+    --text: #0b0b0b;
+    --text2: #52514e;
+    --muted: #898781;
+    --border: rgba(0,0,0,0.1);
+    --green: #16a34a;
+    --yellow: #b45309;
+    --red: #dc2626;
+    --grid: #e1e0d9;
+    --radius: 8px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111110;
+      --surface: #1c1c1a;
+      --surface2: #252523;
+      --text: #f5f5f3;
+      --text2: #c3c2b7;
+      --muted: #898781;
+      --border: rgba(255,255,255,0.1);
+      --grid: #2c2c2a;
+      --yellow: #d97706;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px;
+  }
+
+  .container { max-width: 780px; margin: 0 auto; }
+
+  .top {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px; flex-wrap: wrap; gap: 10px;
+  }
+
+  .title-block h1 { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
+
+  .price-row { display: flex; align-items: baseline; gap: 10px; }
+  .price { font-size: 36px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .chg { font-size: 13px; font-weight: 500; padding: 3px 9px; border-radius: 20px; }
+  .up  { background: rgba(22,163,74,0.12);  color: var(--green); }
+  .dn  { background: rgba(220,38,38,0.12);  color: var(--red); }
+
+  .source { font-size: 11px; color: var(--muted); align-self: flex-start; margin-top: 4px; }
+
+  .big-signal {
+    border-radius: 14px; padding: 20px 22px;
+    margin-bottom: 18px; border: 2px solid;
+    transition: background 0.3s, border-color 0.3s;
+  }
+  .big-signal.green  { border-color: var(--green);  background: rgba(22,163,74,0.09); }
+  .big-signal.yellow { border-color: var(--yellow); background: rgba(180,83,9,0.09); }
+  .big-signal.red    { border-color: var(--red);    background: rgba(220,38,38,0.09); }
+
+  .sig-label { font-size: 24px; font-weight: 500; margin-bottom: 6px; }
+  .sig-label.green  { color: var(--green); }
+  .sig-label.yellow { color: var(--yellow); }
+  .sig-label.red    { color: var(--red); }
+  .sig-sub { font-size: 13px; color: var(--text2); line-height: 1.55; }
+
+  .rule-note {
+    font-size: 12px; color: var(--muted);
+    background: var(--surface2); border-radius: var(--radius);
+    padding: 9px 13px; margin-bottom: 18px; line-height: 1.6;
+  }
+  .rule-note span { font-weight: 600; }
+  .rule-note .r-green  { color: var(--green); }
+  .rule-note .r-yellow { color: var(--yellow); }
+  .rule-note .r-red    { color: var(--red); }
+
+  .ind-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px; margin-bottom: 20px;
+  }
+
+  .ind {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: var(--radius); padding: 13px 15px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .ind-name { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .ind-val  { font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .ind-sub  { font-size: 11px; color: var(--muted); }
+  .ind-arrow { font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 12px; align-self: flex-start; }
+  .arr-up     { background: rgba(22,163,74,0.12);  color: var(--green); }
+  .arr-dn     { background: rgba(220,38,38,0.12);  color: var(--red); }
+  .arr-yellow { background: rgba(180,83,9,0.12);   color: var(--yellow); }
+  .arr-wait   { background: var(--surface2); color: var(--muted); }
+
+  .chart-section { margin-bottom: 18px; }
+  .chart-label { font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+  .chart-wrap  { position: relative; width: 100%; }
+  .chart-wrap.main { height: 230px; }
+  .chart-wrap.sub  { height: 90px; }
+
+  .footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 12px; font-size: 11px; color: var(--muted);
+    flex-wrap: wrap; gap: 8px;
+  }
+
+  .refresh-btn {
+    font-size: 13px; padding: 7px 14px;
+    border-radius: var(--radius);
+    border: 0.5px solid var(--border);
+    background: var(--surface); color: var(--text2);
+    cursor: pointer; display: flex; align-items: center; gap: 6px;
+    transition: background 0.15s;
+  }
+  .refresh-btn:hover { background: var(--surface2); }
+  .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .spinner {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid var(--border); border-top-color: var(--muted);
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="top">
+    <div class="title-block">
+      <h1>SOL/USDT · 15m signal</h1>
+      <div class="price-row">
+        <span class="price" id="price">—</span>
+        <span class="chg" id="chg">—</span>
+      </div>
+    </div>
+    <span class="source">Binance · live data</span>
+  </div>
+
+  <div class="big-signal red" id="big-signal">
+    <div class="sig-label red" id="sig-label">Loading…</div>
+    <div class="sig-sub" id="sig-sub">Fetching 15-minute candles from Binance…</div>
+  </div>
+
+  <div class="rule-note">
+    <span class="r-green">GREEN</span> — CCI + Fisher + Tenkan-sen all rising, OR price &gt;10% above VWMA (20) &nbsp;·&nbsp;
+    <span class="r-yellow">YELLOW</span> — Price consolidating within ±3% of VWMA (any direction on indicators) &nbsp;·&nbsp;
+    <span class="r-red">RED</span> — Price below VWMA, or indicators not aligned and not consolidating
+  </div>
+
+  <div class="ind-row">
+    <div class="ind">
+      <div class="ind-name">CCI (20)</div>
+      <div class="ind-val" id="cci-val">—</div>
+      <span class="ind-arrow arr-wait" id="cci-arr">—</span>
+    </div>
+    <div class="ind">
+      <div class="ind-name">Fisher Transform (9)</div>
+      <div class="ind-val" id="fish-val">—</div>
+      <span class="ind-arrow arr-wait" id="fish-arr">—</span>
+    </div>
+    <div class="ind">
+      <div class="ind-name">Tenkan-sen (9)</div>
+      <div class="ind-val" id="tenk-val">—</div>
+      <span class="ind-arrow arr-wait" id="tenk-arr">—</span>
+    </div>
+    <div class="ind">
+      <div class="ind-name">VWMA (20)</div>
+      <div class="ind-val" id="vwma-val">—</div>
+      <div class="ind-sub" id="vwma-dist">—</div>
+      <span class="ind-arrow arr-wait" id="vwma-arr">—</span>
+    </div>
+  </div>
+
+  <div class="chart-section">
+    <div class="chart-label">Price + Tenkan-sen (orange) + VWMA (purple) · 15m</div>
+    <div class="chart-wrap main">
+      <canvas id="priceChart" role="img" aria-label="SOL/USDT 15-minute price chart with Tenkan-sen and VWMA overlays">SOL 15m price</canvas>
+    </div>
+  </div>
+
+  <div class="chart-section">
+    <div class="chart-label">CCI (20)</div>
+    <div class="chart-wrap sub">
+      <canvas id="cciChart" role="img" aria-label="CCI 20-period indicator">CCI</canvas>
+    </div>
+  </div>
+
+  <div class="chart-section">
+    <div class="chart-label">Fisher Transform (9)</div>
+    <div class="chart-wrap sub">
+      <canvas id="fishChart" role="img" aria-label="Fisher Transform 9-period indicator">Fisher</canvas>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span id="updated">Not yet loaded</span>
+    <button class="refresh-btn" id="refresh-btn" onclick="load()">
+      <span id="spin-icon"></span> Refresh
+    </button>
+  </div>
+
+</div>
+<script>
+const charts = {};
+
+const isDark   = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
+const gridColor = () => isDark() ? '#2c2c2a' : '#e1e0d9';
+const tickColor = () => '#898781';
+
+function fmt(n, d=2){ return n==null ? '—' : Number(n).toFixed(d); }
+
+/* ── Indicators ── */
+
+function calcCCI(highs, lows, closes, period=20){
+  return closes.map((_,i) => {
+    if(i < period-1) return null;
+    const h = highs.slice(i-period+1, i+1);
+    const l = lows.slice(i-period+1, i+1);
+    const c = closes.slice(i-period+1, i+1);
+    const tp = c.map((_,j) => (h[j]+l[j]+c[j])/3);
+    const sma = tp.reduce((a,b)=>a+b,0)/period;
+    const mad = tp.map(v=>Math.abs(v-sma)).reduce((a,b)=>a+b,0)/period;
+    return mad===0 ? 0 : (tp[tp.length-1]-sma)/(0.015*mad);
+  });
+}
+
+function calcFisher(highs, lows, period=9){
+  let prev = 0;
+  return highs.map((_,i) => {
+    if(i < period-1) return null;
+    const hi = Math.max(...highs.slice(i-period+1, i+1));
+    const lo = Math.min(...lows.slice(i-period+1, i+1));
+    const mid = (highs[i]+lows[i])/2;
+    let r = hi===lo ? 0.5 : (mid-lo)/(hi-lo);
+    r = Math.min(Math.max(r, 0.001), 0.999);
+    const f = 0.5*Math.log((1+r)/(1-r))*2 + 0.5*prev;
+    prev = f;
+    return parseFloat(f.toFixed(4));
+  });
+}
+
+function calcTenkan(highs, lows, period=9){
+  return highs.map((_,i) => {
+    if(i < period-1) return null;
+    const hi = Math.max(...highs.slice(i-period+1, i+1));
+    const lo = Math.min(...lows.slice(i-period+1, i+1));
+    return (hi+lo)/2;
+  });
+}
+
+function calcVWMA(closes, volumes, period=20){
+  return closes.map((_,i) => {
+    if(i < period-1) return null;
+    const c = closes.slice(i-period+1, i+1);
+    const v = volumes.slice(i-period+1, i+1);
+    const num = c.reduce((a,b,j) => a + b*v[j], 0);
+    const den = v.reduce((a,b) => a+b, 0);
+    return den===0 ? null : num/den;
+  });
+}
+
+function isRising(arr){
+  const v = arr.filter(x => x!=null);
+  return v.length >= 2 && v[v.length-1] > v[v.length-2];
+}
+
+function lastVal(arr){ return arr.filter(x => x!=null).slice(-1)[0]; }
+
+/* ── Signal logic ── */
+// GREEN  : all 3 indicators rising  OR  price > VWMA by 10%+
+// YELLOW : price within ±3% of VWMA (consolidation zone), price is above VWMA
+// RED    : price below VWMA, or none of the above conditions met
+
+function calcSignal(cciUp, fishUp, tenkUp, price, vwma){
+  if(vwma == null) return 'red';
+  const dist = (price - vwma) / vwma; // positive = above
+
+  // hard red: price below VWMA
+  if(dist < 0) return 'red';
+
+  // green override: price ripped 10%+ above VWMA
+  if(dist >= 0.10) return 'green';
+
+  // green: all three indicators rising and price above VWMA
+  if(cciUp && fishUp && tenkUp) return 'green';
+
+  // yellow: price hugging VWMA (0% to +3% above)
+  if(dist >= 0 && dist < 0.03) return 'yellow';
+
+  // everything else above VWMA but indicators not aligned = red
+  return 'red';
+}
+
+/* ── UI helpers ── */
+
+function setInd(vId, aId, val, rising){
+  document.getElementById(vId).textContent = fmt(val, 3);
+  const el = document.getElementById(aId);
+  if(rising){ el.textContent='Rising'; el.className='ind-arrow arr-up'; }
+  else       { el.textContent='Falling / Flat'; el.className='ind-arrow arr-dn'; }
+}
+
+function setVWMA(vwma, price){
+  document.getElementById('vwma-val').textContent = '$'+fmt(vwma, 2);
+  const dist = vwma != null ? ((price-vwma)/vwma)*100 : null;
+  const distEl  = document.getElementById('vwma-dist');
+  const arrEl   = document.getElementById('vwma-arr');
+  if(dist == null){ distEl.textContent='—'; arrEl.textContent='—'; arrEl.className='ind-arrow arr-wait'; return; }
+  distEl.textContent = (dist>=0?'+':'')+fmt(dist,2)+'% vs price';
+  if(dist >= 10){
+    arrEl.textContent='Breakout +10%'; arrEl.className='ind-arrow arr-up';
+  } else if(dist >= 0 && dist < 3){
+    arrEl.textContent='Consolidating'; arrEl.className='ind-arrow arr-yellow';
+  } else if(dist >= 3){
+    arrEl.textContent='Above VWMA'; arrEl.className='ind-arrow arr-up';
+  } else {
+    arrEl.textContent='Below VWMA'; arrEl.className='ind-arrow arr-dn';
+  }
+}
+
+function applySignal(signal, cciUp, fishUp, tenkUp, price, vwma){
+  const sig = document.getElementById('big-signal');
+  const lbl = document.getElementById('sig-label');
+  const sub = document.getElementById('sig-sub');
+  const dist = vwma ? ((price-vwma)/vwma*100) : null;
+
+  sig.className = 'big-signal '+signal;
+  lbl.className = 'sig-label '+signal;
+
+  if(signal === 'green'){
+    lbl.textContent = '🟢 GREEN — Long bias';
+    if(dist >= 10){
+      sub.textContent = 'Price is '+fmt(dist,1)+'% above VWMA — momentum breakout triggered. Bias is strongly long regardless of oscillator state.';
+    } else {
+      sub.textContent = 'CCI, Fisher Transform, and Tenkan-sen are all rising above VWMA. Full alignment — conditions favor a long entry.';
+    }
+  } else if(signal === 'yellow'){
+    lbl.textContent = '🟡 YELLOW — Consolidation';
+    sub.textContent = 'Price is within 3% of VWMA ('+(dist>=0?'+':'')+fmt(dist,1)+'%). Market is consolidating around the volume-weighted mean. Wait for a decisive break above with indicator confirmation.';
+  } else {
+    lbl.textContent = '🔴 RED — Stay out';
+    const flat = [];
+    if(!cciUp)  flat.push('CCI');
+    if(!fishUp) flat.push('Fisher Transform');
+    if(!tenkUp) flat.push('Tenkan-sen');
+    if(dist != null && dist < 0){
+      sub.textContent = 'Price is below VWMA ('+fmt(dist,1)+'%). Bearish positioning — no long entry until price reclaims the VWMA.';
+    } else {
+      sub.textContent = flat.join(' + ')+' '+(flat.length>1?'are':'is')+' not rising. Price is above VWMA but indicators are not aligned. Wait for full confirmation.';
+    }
+  }
+}
+
+function mkChart(id, labels, datasets, yExtra={}){
+  if(charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 250 },
+      plugins: { legend:{ display:false }, tooltip:{ mode:'index', intersect:false } },
+      scales: {
+        x: { grid:{ color:gridColor() }, ticks:{ color:tickColor(), maxTicksLimit:10, maxRotation:0, font:{size:10} }, border:{display:false} },
+        y: { grid:{ color:gridColor() }, ticks:{ color:tickColor(), font:{size:10}, ...(yExtra.ticks||{}) }, border:{display:false}, ...(yExtra.scale||{}) }
+      }
+    }
+  });
+}
+
+function setLoading(on){
+  document.getElementById('spin-icon').innerHTML = on ? '<span class="spinner"></span>' : '';
+  document.getElementById('refresh-btn').disabled = on;
+}
+
+/* ── Main fetch ── */
+
+async function load(){
+  setLoading(true);
+  document.getElementById('updated').textContent = 'Refreshing…';
+  try {
+    const res = await fetch('https://data-api.binance.vision/api/v3/klines?symbol=SOLUSDT&interval=15m&limit=150');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const raw = await res.json();
+
+    const highs   = raw.map(k => parseFloat(k[2]));
+    const lows    = raw.map(k => parseFloat(k[3]));
+    const closes  = raw.map(k => parseFloat(k[4]));
+    const volumes = raw.map(k => parseFloat(k[5]));
+    const times   = raw.map(k => new Date(k[0]));
+    const labels  = times.map(t =>
+      t.getHours().toString().padStart(2,'0')+':'+t.getMinutes().toString().padStart(2,'0')
+    );
+
+    const cur     = closes[closes.length-1];
+    const prev    = closes[closes.length-2];
+    const chgPct  = ((cur-prev)/prev)*100;
+
+    document.getElementById('price').textContent = '$'+fmt(cur, 2);
+    const chgEl = document.getElementById('chg');
+    chgEl.textContent = (chgPct>=0?'+':'')+fmt(chgPct,2)+'%';
+    chgEl.className   = 'chg '+(chgPct>=0?'up':'dn');
+
+    const cci    = calcCCI(highs, lows, closes, 20);
+    const fisher = calcFisher(highs, lows, 9);
+    const tenkan = calcTenkan(highs, lows, 9);
+    const vwma   = calcVWMA(closes, volumes, 20);
+
+    const cciUp  = isRising(cci);
+    const fishUp = isRising(fisher);
+    const tenkUp = isRising(tenkan);
+    const curVWMA = lastVal(vwma);
+
+    setInd('cci-val',  'cci-arr',  lastVal(cci),    cciUp);
+    setInd('fish-val', 'fish-arr', lastVal(fisher),  fishUp);
+    setInd('tenk-val', 'tenk-arr', lastVal(tenkan),  tenkUp);
+    setVWMA(curVWMA, cur);
+
+    const signal = calcSignal(cciUp, fishUp, tenkUp, cur, curVWMA);
+    applySignal(signal, cciUp, fishUp, tenkUp, cur, curVWMA);
+
+    /* ── Charts ── */
+    mkChart('priceChart', labels, [
+      { label:'Price',       data:closes, borderColor:'#2a78d6', backgroundColor:'rgba(42,120,214,0.07)', fill:true,  tension:0.3, pointRadius:0, borderWidth:1.5 },
+      { label:'Tenkan-sen',  data:tenkan, borderColor:'#eda100', backgroundColor:'transparent',            fill:false, tension:0.3, pointRadius:0, borderWidth:1.5, borderDash:[5,3] },
+      { label:'VWMA (20)',   data:vwma,   borderColor:'#a855f7', backgroundColor:'transparent',            fill:false, tension:0.3, pointRadius:0, borderWidth:1.5, borderDash:[3,2] }
+    ]);
+
+    const cciColor  = cciUp  ? '#16a34a' : '#dc2626';
+    const fishColor = fishUp ? '#16a34a' : '#dc2626';
+
+    mkChart('cciChart', labels, [{
+      label:'CCI', data:cci,
+      borderColor: cciColor,
+      backgroundColor: cciUp ? 'rgba(22,163,74,0.07)' : 'rgba(220,38,38,0.07)',
+      fill:true, tension:0.3, pointRadius:0, borderWidth:1.5
+    }], {
+      ticks: { callback: v => Math.round(v) },
+      scale: { afterDataLimits(sc){ const r=Math.max(Math.abs(sc.min),Math.abs(sc.max),100); sc.min=-r; sc.max=r; } }
+    });
+
+    mkChart('fishChart', labels, [{
+      label:'Fisher', data:fisher,
+      borderColor: fishColor,
+      backgroundColor: fishUp ? 'rgba(22,163,74,0.07)' : 'rgba(220,38,38,0.07)',
+      fill:true, tension:0.3, pointRadius:0, borderWidth:1.5
+    }], {
+      ticks: { callback: v => Number(v).toFixed(2) }
+    });
+
+    document.getElementById('updated').textContent =
+      'Updated '+new Date().toLocaleTimeString()+' · Binance · auto-refresh 60s';
+
+  } catch(e) {
+    document.getElementById('sig-label').textContent = 'Error fetching data';
+    document.getElementById('sig-sub').textContent   = e.message+' — check your internet connection and try again.';
+    document.getElementById('updated').textContent   = 'Fetch failed · '+new Date().toLocaleTimeString();
+    console.error(e);
+  }
+  setLoading(false);
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
