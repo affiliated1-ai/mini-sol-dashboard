@@ -128,12 +128,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .add-btn{font-size:12px;padding:6px 13px;border-radius:var(--radius);background:var(--blue);color:#fff;border:none;cursor:pointer;white-space:nowrap}
 .add-btn:hover{opacity:.9}
 .trade-list{display:flex;flex-direction:column;gap:4px;max-height:150px;overflow-y:auto}
-.trade-row{display:grid;grid-template-columns:50px 55px 80px 80px 80px 1fr 28px;gap:6px;align-items:center;font-size:12px;background:var(--surface2);border-radius:6px;padding:6px 8px}
+.trade-row{display:grid;grid-template-columns:42px 42px 50px 65px 65px 38px 1fr 24px;gap:5px;align-items:center;font-size:11px;background:var(--surface2);border-radius:6px;padding:5px 8px}
 .trade-row.header{font-size:10px;color:var(--muted);text-transform:uppercase;background:transparent;padding:0 8px;margin-bottom:2px}
 .t-side-long{color:var(--green);font-weight:600}.t-side-short{color:var(--red);font-weight:600}
 .t-pnl.pos{color:var(--green)}.t-pnl.neg{color:var(--red)}
 .del-btn{font-size:14px;background:none;border:none;color:var(--muted);cursor:pointer;padding:0;line-height:1}
 .del-btn:hover{color:var(--red)}
+.t-type-perp{color:#a855f7;font-weight:500}
+.t-type-spot{color:#64748b;font-weight:500}
 .no-trades{font-size:12px;color:var(--muted);text-align:center;padding:12px 0}
 
 /* footer */
@@ -310,6 +312,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 
+
   <!-- TRADE TRACKER -->
   <div class="tracker">
     <div class="tracker-header">
@@ -318,25 +321,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <span>Trades: <span class="stat-val" id="stat-count">0</span></span>
         <span>Win/Loss: <span class="stat-val" id="stat-wl">—</span></span>
         <span>PnL: <span class="stat-val" id="stat-pnl">$0.00</span></span>
+        <span>Return: <span class="stat-val" id="stat-return">—</span></span>
       </div>
     </div>
     <div class="trade-form">
+      <select class="trade-select" id="t-type" onchange="onTypeChange()">
+        <option value="Spot">Spot</option>
+        <option value="Perp" selected>Perp</option>
+      </select>
       <select class="trade-select" id="t-side">
         <option value="Long">Long</option>
         <option value="Short">Short</option>
       </select>
-      <input class="trade-input" id="t-asset" placeholder="Asset" value="SOL">
-      <input class="trade-input" id="t-entry" placeholder="Entry $" type="number" step="0.01">
-      <input class="trade-input" id="t-exit"  placeholder="Exit $"  type="number" step="0.01">
-      <input class="trade-input" id="t-size"  placeholder="Size $"  type="number" step="1">
-      <button class="add-btn" onclick="addTrade()">+ Add Trade</button>
+      <input class="trade-input" id="t-asset"  placeholder="Asset"    value="SOL">
+      <input class="trade-input" id="t-entry"  placeholder="Entry $"  type="number" step="0.01">
+      <input class="trade-input" id="t-exit"   placeholder="Exit $"   type="number" step="0.01">
+      <!-- Spot: Size in $ | Perp: Margin Size in $ (notional implied) -->
+      <input class="trade-input" id="t-size" placeholder="Margin Size $" type="number" step="0.01">
+      <button class="add-btn" onclick="addTrade()">+ Add</button>
     </div>
-    <div class="trade-row header">
-      <span>Side</span><span>Asset</span><span>Entry</span><span>Exit</span><span>Size</span><span>PnL</span><span></span>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--muted)" id="initial-label">Initial investment ($):</span>
+      <input class="trade-input" id="t-initial" type="number" step="0.01" value="10.25" style="width:80px" onchange="renderTrades()">
+      <span style="font-size:11px;color:var(--muted)" id="initial-note">Perp return % calculated vs this amount</span>
     </div>
-    <div class="trade-list" id="trade-list">
-      <div class="no-trades" id="no-trades">No trades logged yet today.</div>
+    <div class="trade-row header" id="trade-header">
+      <span>Type</span><span>Side</span><span>Asset</span><span>Entry</span><span>Exit</span><span>Size</span><span>PnL</span><span></span>
     </div>
+    <div class="trade-list" id="trade-list"></div>
   </div>
 
   </div>
@@ -941,59 +953,104 @@ async function load(){
 /* ── Trade Tracker ── */
 function saveTrades(){ localStorage.setItem('sol_trades_'+today(), JSON.stringify(trades)); }
 
+function onTypeChange(){
+  const isPerp = document.getElementById('t-type').value === 'Perp';
+  document.getElementById('t-size').placeholder = isPerp ? 'Margin Size $' : 'Size $';
+  document.getElementById('initial-note').textContent = isPerp
+    ? 'Perp return % calculated vs this amount'
+    : 'Spot return % calculated vs position size';
+}
+
+function getInitial(){
+  return parseFloat(document.getElementById('t-initial').value)||10.25;
+}
+
 function addTrade(){
-  const side  =document.getElementById('t-side').value;
-  const asset =document.getElementById('t-asset').value.trim()||currentAsset;
-  const entry =parseFloat(document.getElementById('t-entry').value);
-  const exit  =parseFloat(document.getElementById('t-exit').value);
-  const size  =parseFloat(document.getElementById('t-size').value);
-  if(!entry||!exit||!size||isNaN(entry)||isNaN(exit)||isNaN(size)){alert('Please fill in Entry, Exit, and Size.');return;}
-  const pnl=side==='Long'?((exit-entry)/entry)*size:(-(exit-entry)/entry)*size;
-  trades.push({id:Date.now(),side,asset,entry,exit,size,pnl});
+  const type  = document.getElementById('t-type').value;
+  const side  = document.getElementById('t-side').value;
+  const asset = document.getElementById('t-asset').value.trim()||currentAsset;
+  const entry = parseFloat(document.getElementById('t-entry').value);
+  const exit  = parseFloat(document.getElementById('t-exit').value);
+  const size  = parseFloat(document.getElementById('t-size').value);
+  if(!entry||!exit||!size||isNaN(entry)||isNaN(exit)||isNaN(size)){
+    alert('Please fill in Entry, Exit, and '+(type==='Perp'?'Margin Size':'Size')+'.'); return;
+  }
+
+  const pricePct = (exit - entry) / entry;
+  const dirMult  = side === 'Long' ? 1 : -1;
+  const pnl      = dirMult * pricePct * size;
+
+  trades.push({id:Date.now(), type, side, asset, entry, exit, size, pnl});
   saveTrades();
-  document.getElementById('t-entry').value='';
-  document.getElementById('t-exit').value='';
-  document.getElementById('t-size').value='';
+  document.getElementById('t-entry').value = '';
+  document.getElementById('t-exit').value  = '';
+  document.getElementById('t-size').value  = '';
   renderTrades();
 }
 
 function deleteTrade(id){
-  trades=trades.filter(t=>t.id!==id);
+  trades = trades.filter(t => t.id !== id);
   saveTrades();
   renderTrades();
 }
 
 function renderTrades(){
-  const list=document.getElementById('trade-list');
-  const noT =document.getElementById('no-trades');
-  if(trades.length===0){list.innerHTML='';list.appendChild(noT);noT.style.display='block';}
-  else{
-    noT.style.display='none';
-    list.innerHTML=trades.map(t=>{
-      const pnlCls=t.pnl>=0?'pos':'neg';
-      const sideCls=t.side==='Long'?'t-side-long':'t-side-short';
+  const list    = document.getElementById('trade-list');
+  const initial = getInitial();
+
+  // Always replace innerHTML cleanly — no DOM node detach/reattach
+  if(trades.length === 0){
+    list.innerHTML = '<div class="no-trades">No trades logged yet today.</div>';
+  } else {
+    list.innerHTML = trades.map(t => {
+      const pnlCls     = t.pnl >= 0 ? 'pos' : 'neg';
+      const sideCls    = t.side === 'Long' ? 't-side-long' : 't-side-short';
+      const typeCls    = t.type === 'Perp' ? 't-type-perp' : 't-type-spot';
+      const isPerp     = t.type === 'Perp';
+      const returnBase = isPerp ? initial : t.size;
+      const retPct     = returnBase > 0 ? (t.pnl / returnBase) * 100 : 0;
+      const sizeLabel  = isPerp ? 'M' : '$';
       return `<div class="trade-row">
+        <span class="${typeCls}">${t.type}</span>
         <span class="${sideCls}">${t.side}</span>
         <span>${t.asset}</span>
         <span>$${fmt(t.entry,2)}</span>
         <span>$${fmt(t.exit,2)}</span>
-        <span>$${fmt(t.size,0)}</span>
-        <span class="t-pnl ${pnlCls}">${fmtP(t.pnl)} (${fmtP(((t.exit-t.entry)/t.entry)*100)}%)</span>
-        <button class="del-btn" onclick="deleteTrade(${t.id})" title="Remove">×</button>
+        <span>${sizeLabel}${fmt(t.size,2)}</span>
+        <span class="t-pnl ${pnlCls}">${t.pnl>=0?'+':''}$${fmt(Math.abs(t.pnl),2)} <span style="font-size:10px">(${fmtP(retPct)}%)</span></span>
+        <button class="del-btn" data-id="${t.id}" title="Remove">×</button>
       </div>`;
     }).join('');
   }
-  const total=trades.reduce((a,t)=>a+t.pnl,0);
-  const wins =trades.filter(t=>t.pnl>0).length;
-  const loss =trades.filter(t=>t.pnl<=0).length;
-  document.getElementById('stat-count').textContent=trades.length;
-  document.getElementById('stat-wl').innerHTML=`<span class="stat-green">${wins}W</span>/<span class="stat-red">${loss}L</span>`;
-  const pnlEl=document.getElementById('stat-pnl');
-  pnlEl.textContent=(total>=0?'+':'')+'$'+fmt(Math.abs(total),2);
-  pnlEl.className='stat-val '+(total>=0?'stat-green':'stat-red');
+
+  const total  = trades.reduce((a,t) => a+t.pnl, 0);
+  const wins   = trades.filter(t => t.pnl > 0).length;
+  const loss   = trades.filter(t => t.pnl <= 0).length;
+  const retPct = initial > 0 ? (total / initial) * 100 : 0;
+
+  document.getElementById('stat-count').textContent = trades.length;
+  document.getElementById('stat-wl').innerHTML =
+    `<span class="stat-green">${wins}W</span>/<span class="stat-red">${loss}L</span>`;
+
+  const pnlEl = document.getElementById('stat-pnl');
+  pnlEl.textContent = (total>=0?'+':'')+'$'+fmt(Math.abs(total),2);
+  pnlEl.className   = 'stat-val '+(total>=0?'stat-green':'stat-red');
+
+  const retEl = document.getElementById('stat-return');
+  retEl.textContent = fmtP(retPct)+'%  vs $'+fmt(initial,2);
+  retEl.className   = 'stat-val '+(retPct>=0?'stat-green':'stat-red');
 }
 
 renderTrades();
+
+// Event delegation — handles delete clicks even after list re-renders
+document.getElementById('trade-list').addEventListener('click', function(e){
+  const btn = e.target.closest('.del-btn');
+  if(!btn) return;
+  const id = parseInt(btn.getAttribute('data-id'));
+  if(!isNaN(id)) deleteTrade(id);
+});
+
 updateAlertBtn();
 load();
 setInterval(load, 30000);
