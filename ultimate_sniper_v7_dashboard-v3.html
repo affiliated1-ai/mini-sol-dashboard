@@ -1321,32 +1321,6 @@ async function load() {
         setInd('tenk-val', 'tenk-arr', lastVal(tenkan), tenkUp);
         setVWMA(curVWMA, cur);
 
-        // Volume
-        document.getElementById('vol-val').textContent=fmtVol(cV[cV.length-1]);
-        const volEl=document.getElementById('vol-arr');
-        volEl.textContent=volOK?'Above avg': 'Below avg';
-        volEl.className='ind-arrow '+(volOK?'arr-up':'arr-dn');
-
-        // ATR
-        document.getElementById('atr-val').textContent=curATR!=null?fmt(curATR,3):'-';
-        const atrEl=document.getElementById('atr-arr');
-        atrEl.textContent=atrOK?'Expanding': 'Contracting';
-        atrEl.className='ind-arrow '+(atrOK?'arr-up':'arr-dn');
-
-        // ADX (Enforce >45 label)
-        document.getElementById('adx-val').textContent=curADX!=null?fmt(curADX,1):'-';
-        const adxEl=document.getElementById('adx-arr');
-        adxEl.textContent=adxOK?'Trending (>45)': curADX!=null&&curADX>20?'Weak (<45)':'Choppy (<20)';
-        adxEl.className='ind-arrow '+(adxOK?'arr-up':'arr-flat');
-
-        // Session
-        const utcH=new Date().getUTCHours();
-        const sessName=utcH>=13&&utcH<21?'US Session': utcH>=0&&utcH<4?'Asia Open': 'Off-hours';
-        document.getElementById('sess-val').textContent=sessName;
-        const sessEl=document.getElementById('sess-arr');
-        sessEl.textContent=sessionOK?'Active': 'Quiet';
-        sessEl.className='ind-arrow '+(sessionOK?'arr-up':'arr-flat');
-
         // 5m Fisher Exit Logic
         let fisher5mBearishCross = false;
         let lastFisher5mVal = null;
@@ -1723,7 +1697,8 @@ function fireAlertIfChanged(signal, price, cciUp, fishUp, tenkUp) {
     const label = signal === 'green' ? 'GREEN Falcon Long' : signal === 'yellow' ? 'YELLOW Cash Standby' : 'RED Falcon Short';
     
     // 1. Gather live ATR for dynamic bracket offsets
-    const curATRVal = parseFloat(document.getElementById('atr-val').textContent) || 0.35;
+    const atrValueEl = document.getElementById('atr-val');
+    const curATRVal = atrValueEl ? parseFloat(atrValueEl.textContent) || 0.35 : 0.35;
     const isLong = signal === 'green';
     
     // 2. Adjust entry limit order offset based on timeframe
