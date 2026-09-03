@@ -1384,6 +1384,29 @@ async function load() {
         const cciAccel=isMomentumAccelerating(cci);
         const lastBarTS=times[times.length-2]?.getTime()||0;
 
+        const sigObj = calcSignal(
+            cci,
+            cciUp,
+            fisher,
+            fishUp,
+            tenkUp,
+            cur,
+            curVWMA,
+            curSMA50,
+            volOK,
+            atrOK,
+            adxOK,
+            crossUp,
+            htfSignal,
+            bullishCandle,
+            cciDiv,
+            fishDiv,
+            cciAccel,
+            lastBarTS
+        );
+
+        applySignal(sigObj, cci, cciUp, fisher, fishUp, tenkUp, cur, curVWMA, curSMA50, volOK, atrOK, adxOK, crossUp);
+
         // UI Card Updates
         const candleEl = document.getElementById('candle-arr');
         if (candleEl) {
