@@ -1552,7 +1552,7 @@ async function load() {
 
         // Session (Safely wrapped)
         const sessValEl = document.getElementById('sess-val');
-        if (sessValEl) sessValEl.textContent = sessName;
+        if (sessValEl) sessValEl.textContent = sessionOK ? 'Active' : 'Quiet';
         const sessEl = document.getElementById('sess-arr');
         if (sessEl) {
             sessEl.textContent = sessionOK ? 'Active' : 'Quiet';
@@ -3745,7 +3745,7 @@ async function load() {
 
         // Session (Safely wrapped)
         const sessValEl = document.getElementById('sess-val');
-        if (sessValEl) sessValEl.textContent = sessName;
+        if (sessValEl) sessValEl.textContent = sessionOK ? 'Active' : 'Quiet';
         const sessEl = document.getElementById('sess-arr');
         if (sessEl) {
             sessEl.textContent = sessionOK ? 'Active' : 'Quiet';
