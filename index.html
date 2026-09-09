@@ -2056,6 +2056,16 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
     saveZoom(id);
     const upColor = '#16a34a';
     const downColor = '#dc2626';
+    const visibleBars = ohlcData.slice(-60);
+    const visibleValues = visibleBars.flatMap(d => [d.h, d.l]);
+    [tenkanXY, vwmaXY, sma50XY].forEach(series => {
+        series.slice(-60).forEach(point => {
+            if (Number.isFinite(point.y)) visibleValues.push(point.y);
+        });
+    });
+    const visibleMin = Math.min(...visibleValues);
+    const visibleMax = Math.max(...visibleValues);
+    const visiblePadding = (visibleMax - visibleMin) * 0.08 || visibleMax * 0.01;
     if(charts[id])charts[id].destroy();
     charts[id] = new Chart(document.getElementById(id), {
         type: 'candlestick',
@@ -2107,6 +2117,11 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
             animation: { duration: 0 },
             plugins: {
                 legend: { display: false },
+                zoom: {
+                    pan: { enabled: true, mode: 'x' },
+                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+                    limits: { x: { minRange: 5 } }
+                },
                 tooltip: {
                     mode: 'index',
                     intersect: false,
@@ -2132,7 +2147,9 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
                 y: {
                     grid: { color: gridColor() },
                     ticks: { color: tickColor(), font: { size: 10 }, callback: v => '$'+fmt(v,0) },
-                    border: { display: false }
+                    border: { display: false },
+                    min: visibleMin - visiblePadding,
+                    max: visibleMax + visiblePadding
                 }
             }
         }

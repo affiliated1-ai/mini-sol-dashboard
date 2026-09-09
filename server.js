@@ -267,8 +267,11 @@ setInterval(monitorPositions, 30_000);
 
 // ── Express routes ────────────────────────────────────────────────
 const app = express();
-app.use(cors({ origin: () => true }));
+app.use(cors());
 app.use(express.json());
+
+app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/config.js', (_req, res) => res.sendFile(path.join(__dirname, 'config.js')));
 
 // Dashboard posts here on every signal change
 app.post('/signal', async (req, res) => {

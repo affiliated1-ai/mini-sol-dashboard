@@ -26,4 +26,12 @@ window.DASHBOARD_CONFIG = {
   // Example: "-1001234567890"
   TELEGRAM_CHAT_ID: "5926822072",
 
+
+  // ── Auto-Trader Backend ───────────────────────────────────────
+  // URL of your running server.js
+  // Local (same machine):  "http://localhost:3001"
+  // Remote VPS:            "http://YOUR_SERVER_IP:3001"
+  // Leave empty to run dashboard-only (no auto-trading)
+  BOT_URL: "https://localhost:3001",
+ 
 };
