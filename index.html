@@ -1517,6 +1517,7 @@ async function load() {
         const adxOK=curADX!=null&&curADX>45; // FIXED: Elevated from >25 to >45 for Sniper Gating
         const crossUp=isFisherCrossUp(fisher, fishSig);
         const sessionOK=isGoodSession();
+        const sessName=sessionOK ? 'Active' : 'Quiet';
 
         setInd('cci-val', 'cci-arr', lastVal(cci), cciUp);
         setInd('fish-val', 'fish-arr', lastVal(fisher), fishUp);

@@ -12,6 +12,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "solana-cli": "^2.0.4",
     "solana-keygen": "^0.3.0",
     "telegraf": "^4.16.3"
   },
