@@ -218,9 +218,9 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
   </div>
 </div>
 <div class="rule-note">
-<span class="r-green">ADAPTIVE SIGNALS</span> Toggles strategy automatically: <b>Oversold Hook (v7)</b> in Trends 🚀 vs. <b>Bull Divergence (v8)</b> in liquidations ⚡.<br>
-<span class="r-yellow">DYNAMIC OPTIMIZER</span> Auto-adjusts Entry Limit offsets, Take Profits (TP1 at 25¢ fee-neutralized), and ATR Stop Losses dynamically based on <b>4 Market Regimes</b>.<br>
-<span style="color:var(--muted)"><b>Regime States</b>: FLASH CRASH (Suppresses Hooks, opens Divergences) · MARKET CHOP (Blocks entries) · RANGE SUPPORT (Enables Hooks & Divs) · BULL DRIFT (Enables Hooks & ride runners).</span>
+<span class="r-green">ADAPTIVE AUTO SIGNALS (v10.5)</span> Toggles strategy automatically: <b>Oversold Hook (v7)</b> in Ranges/Trends vs. <b>Bull Divergence (v8)</b> in Crashes.<br>
+<span class="r-yellow">DYNAMIC OPTIMIZER</span> Auto-adjusts Entry wicks, Take Profits, and Stop Losses based on 4 regimes (FLASH CRASH · MARKET CHOP · RANGE BOUND · BULL DRIFT).<br>
+<span class="r-red">JUPITER LSD SAFETY</span> Scales leverage to <b>10x</b> when balance is below $12.50. This shields your wallet from high-leverage transaction fees and tight stop-loss wipes, preventing your account from dropping below the $10 perp limit!
 </div>
 <!-- INDICATOR CARDS -->
 <div class="ind-section">
@@ -775,8 +775,8 @@ async function runLiveBacktest() {
                 const filled = lows[i+1] <= entry_target;
                 
                 if (filled) {
-                    const margin = balance * size_pct;
-                    const position_size_usd = margin * 40;
+                    const isLSD = balance < 12.50; const leverage = isLSD ? 10 : 60; const backtest_sl = isLSD ? 0.30 : (slCoeff * cur_atr); const backtest_tp1 = isLSD ? 0.15 : tp1; const margin = isLSD ? (balance >= 10.50 ? 10.50 : (balance - 0.05)) : (balance * size_pct);
+                    const position_size_usd = margin * leverage;
                     const token_count = position_size_usd / entry_target;
                     
                     let exited = false;
@@ -785,9 +785,9 @@ async function runLiveBacktest() {
                     let exit_price = 0;
                     let exit_type = "";
                     
-                    const tp1_target = entry_target + tp1;
+                    const tp1_target = entry_target + backtest_tp1;
                     const tp2_target = entry_target + tp2;
-                    const sl_target = entry_target - (slCoeff * cur_atr);
+                    const sl_target = entry_target - backtest_sl;
                     
                     for (let j = i + 1; j < raw_15m.length - 1; j++) {
                         const low = lows[j];
@@ -796,26 +796,26 @@ async function runLiveBacktest() {
                         if (!tp1_hit) {
                             if (low <= sl_target) {
                                 exit_price = sl_target;
-                                pnl = (sl_target - entry_target) * token_count - (position_size_usd * 0.0004);
+                                pnl = (sl_target - entry_target) * token_count - (position_size_usd * 0.0008);
                                 exit_type = "Loss";
                                 exited = true;
                                 break;
                             }
                             if (high >= tp1_target) {
                                 tp1_hit = true;
-                                pnl += (tp1_target - entry_target) * (token_count / 2) - (position_size_usd / 2 * 0.0004);
+                                pnl += (tp1_target - entry_target) * (token_count / 2) - (position_size_usd / 2 * 0.0008);
                             }
                         } else {
                             if (low <= entry_target) {
                                 exit_price = entry_target;
-                                pnl -= (position_size_usd / 2 * 0.0004);
+                                pnl -= (position_size_usd / 2 * 0.0008);
                                 exit_type = "Half TP/BE";
                                 exited = true;
                                 break;
                             }
                             if (high >= tp2_target) {
                                 exit_price = tp2_target;
-                                pnl += (tp2_target - entry_target) * (token_count / 2) - (position_size_usd / 2 * 0.0004);
+                                pnl += (tp2_target - entry_target) * (token_count / 2) - (position_size_usd / 2 * 0.0008);
                                 exit_type = "Full TP";
                                 exited = true;
                                 break;
@@ -1552,7 +1552,7 @@ async function load() {
 
         // Session (Safely wrapped)
         const sessValEl = document.getElementById('sess-val');
-        if (sessValEl) sessValEl.textContent = sessionOK ? 'Active' : 'Quiet';
+        if (sessValEl) sessValEl.textContent = sessName;
         const sessEl = document.getElementById('sess-arr');
         if (sessEl) {
             sessEl.textContent = sessionOK ? 'Active' : 'Quiet';
@@ -1720,7 +1720,7 @@ async function load() {
         // ATR mini-chart
         const atrColor = atrOK ? '#22c55e' : '#ef4444';
         mkChart('atrChart', labels, [
-        {label:'ATR',data:atr,borderColor:atrColor,backgroundColor:atrOK?'rgba(34,197,94,0.07)':'rgba(239,68,68,0.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:1.5}
+            {label:'ATR',data:atr,borderColor:atrColor,backgroundColor:atrOK?'rgba(34,197,94,0.07)':'rgba(239,68,68,0.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:1.5}
         ],{ticks:{callback:v=>fmt(v,3)}});
 
         // POST signal to backend if configured
@@ -1746,6 +1746,7 @@ async function load() {
                 })
             }).catch(e => console.warn('Bot POST failed:', e.message));
         }
+
         document.getElementById('updated').textContent='Updated '+new Date().toLocaleTimeString() + ' | Binance Live (30s)';
     } catch(e) {
         document.getElementById('sig-label').textContent='Error fetching data';
@@ -2049,10 +2050,12 @@ function syncZoom(targetId,srcId){
     const s=charts[srcId],t=charts[targetId]; if(!s||!t)return;
     try{const x=s.scales.x; t.zoomScale('x',{min:x.min,max:x.max},'none'); zoomState[targetId]={min:x.min,max:x.max};}catch(e){}
 }
+
 function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
     saveZoom(id);
     const upColor = '#16a34a';
     const downColor = '#dc2626';
+    if(charts[id])charts[id].destroy();
     charts[id] = new Chart(document.getElementById(id), {
         type: 'candlestick',
         data: {
@@ -2115,11 +2118,6 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
                             return `${ctx.dataset.label}: $${fmt(ctx.parsed.y,2)}`;
                         }
                     }
-                },
-                zoom: {
-                    pan: { enabled: true, mode: 'x' },
-                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
-                    limits: { x: { minRange: 5 } }
                 }
             },
             scales: {

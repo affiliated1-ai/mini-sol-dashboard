@@ -1,0 +1,18 @@
+{
+  "name": "sol-auto-trader",
+  "version": "1.0.0",
+  "description": "Auto-trading backend for SOL Reversal Adaptive Sniper v10",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev":   "node --watch server.js"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.91.1",
+    "cors":            "^2.8.5",
+    "dotenv":          "^16.4.5",
+    "express":         "^4.19.2",
+    "telegraf":        "^4.16.3"
+  },
+  "engines": { "node": ">=18.0.0" }
+}

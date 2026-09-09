@@ -1,0 +1,13 @@
+# Wallet — NEVER commit
+wallet.json
+*.json.bak
+
+# Secrets
+.env
+
+# Bot state (regenerates on start)
+state.json
+bot.log
+
+# Node
+node_modules/
