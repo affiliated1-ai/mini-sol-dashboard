@@ -31,6 +31,19 @@ const DAILY_LOSS_LIMIT = parseFloat(process.env.DAILY_LOSS_LIMIT || '50');
 const STARTING_BALANCE = parseFloat(process.env.STARTING_BALANCE || '240');
 const FILL_TIMEOUT_MS  = parseInt(process.env.FILL_TIMEOUT_MS || '120000'); // 2 min
 
+function getPullbackOffset(timeframe, atr) {
+  const limits = {
+    '5m': [0.03, 0.20],
+    '15m': [0.05, 0.20],
+    '30m': [0.05, 0.20],
+    '1h': [0.15, 0.40],
+    '4h': [0.20, 0.40],
+  };
+  const [min, max] = limits[timeframe] || limits['15m'];
+  const value = Number.isFinite(Number(atr)) ? Number(atr) * 0.25 : min;
+  return Math.min(max, Math.max(min, value));
+}
+
 // ── State file ────────────────────────────────────────────────────
 const STATE_FILE = path.join(__dirname, 'state.json');
 
@@ -141,8 +154,10 @@ async function handleSignal(sig) {
 
   // ── Compute entry / SL / TP ───────────────────────────────────
   const isLong    = direction === 'green';
-  const off       = entryOffset || 0.15;
   const atrVal    = parseFloat(atr) || 0.35;
+  const off       = entryOffset != null && Number.isFinite(Number(entryOffset))
+    ? Number(entryOffset)
+    : getPullbackOffset(timeframe, atrVal);
   const sl        = (slCoeff  || 1.8);
   const _tp1      = tp1 || 0.25;
   const _tp2      = tp2 || 0.75;
