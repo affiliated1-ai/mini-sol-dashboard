@@ -5,14 +5,17 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev":   "node --watch server.js"
+    "dev": "node --watch server.js"
   },
   "dependencies": {
-    "@solana/web3.js": "^1.91.1",
-    "cors":            "^2.8.5",
-    "dotenv":          "^16.4.5",
-    "express":         "^4.19.2",
-    "telegraf":        "^4.16.3"
+    "@solana/web3.js": "^1.99.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "solana-keygen": "^0.3.0",
+    "telegraf": "^4.16.3"
   },
-  "engines": { "node": ">=18.0.0" }
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
