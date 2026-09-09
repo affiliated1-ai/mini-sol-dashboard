@@ -1,0 +1,5 @@
+window.DASHBOARD_CONFIG = {
+  TELEGRAM_TOKEN:   "8248545561:AAH03GqpMD58hk1rVgVLbLo5sntu1lNPY_8",
+  TELEGRAM_CHAT_ID: "5926822072",
+  BOT_URL:          "http://localhost:3001",
+};
