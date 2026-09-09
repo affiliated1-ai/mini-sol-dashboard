@@ -42,6 +42,7 @@ npm start
 
 ## Signal Flow
 
+
 The dashboard POSTs to `http://localhost:3001/signal` on every signal change with:
 ```json
 {
