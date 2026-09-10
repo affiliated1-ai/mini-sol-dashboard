@@ -5,12 +5,11 @@
  *  All Solana + Jupiter interaction is isolated here.
  *  server.js calls these functions only.
  *
+ *  Set DEVNET=true in .env to switch everything to devnet.
+ *  Set DEVNET=false (or omit) for mainnet.
+ *
  *  Jupiter Perps REST API:
  *    https://station.jup.ag/docs/perpetual-trading/perpetual-api
- *
- *  NOTE: Jupiter's Perp SDK is still evolving. This file uses the
- *  REST API approach for maximum stability. When Jupiter publishes
- *  a stable TS SDK, the fetch() calls below can be swapped in.
  * ═══════════════════════════════════════════════════════════════════
  */
 'use strict';
@@ -20,28 +19,30 @@ const fs   = require('fs');
 const path = require('path');
 const { log } = require('./utils');
 
-// ── Wallet loading ────────────────────────────────────────────────
-// Load from a local JSON keypair file (solana-keygen output).
-// Path set in .env. NEVER hardcode or commit.
-const KEYPAIR_PATH = process.env.KEYPAIR_PATH || path.join(__dirname, 'wallet.json');
-const RPC_URL      = process.env.SOLANA_RPC   || 'https://api.mainnet-beta.solana.com';
+// ── Network toggle ────────────────────────────────────────────────
+const IS_DEVNET = process.env.DEVNET === 'true';
+const NETWORK   = IS_DEVNET ? 'DEVNET' : 'MAINNET';
 
-let _kp = null;
-function getKeypair() {
-  if (_kp) return _kp;
-  if (!fs.existsSync(KEYPAIR_PATH))
-    throw new Error(`Wallet not found: ${KEYPAIR_PATH}. Set KEYPAIR_PATH in .env`);
-  const raw = JSON.parse(fs.readFileSync(KEYPAIR_PATH, 'utf8'));
-  _kp = Keypair.fromSecretKey(Uint8Array.from(raw));
-  log(`Wallet: ${_kp.publicKey.toBase58().slice(0,10)}…`);
-  return _kp;
-}
+// ── RPC endpoints ─────────────────────────────────────────────────
+const RPC_DEFAULT = IS_DEVNET
+  ? 'https://api.devnet.solana.com'
+  : 'https://api.mainnet-beta.solana.com';
+const RPC_URL = process.env.SOLANA_RPC || RPC_DEFAULT;
 
-const connection = new Connection(RPC_URL, 'confirmed');
+// ── Keypair path ──────────────────────────────────────────────────
+// Use separate wallet files for devnet vs mainnet — never mix them
+const KEYPAIR_DEFAULT = IS_DEVNET ? './wallet-devnet.json' : './wallet.json';
+const KEYPAIR_PATH    = process.env.KEYPAIR_PATH || path.join(__dirname, KEYPAIR_DEFAULT);
 
-// ── Jupiter Perps market addresses (mainnet) ──────────────────────
-// Source: https://station.jup.ag/docs/perpetual-trading/perpetual-api
-const MARKETS = {
+// ── Jupiter API base ──────────────────────────────────────────────
+const API = IS_DEVNET
+  ? 'https://perp.jup.ag/v1/devnet'
+  : 'https://perp.jup.ag/v1';
+
+// ── Market addresses ──────────────────────────────────────────────
+// Mainnet: https://station.jup.ag/docs/perpetual-trading/perpetual-api
+// Devnet:  only SOL/USDC is reliably available on Jupiter devnet
+const MARKETS_MAINNET = {
   SOL: 'GVXRSBjFk6e6J3NbVPXohDJetcTjaeeuykUpbQF8UoMU',
   BTC: '4bM22ixZAhpuHtFvT4VhEfbDaGoGqiEyTtLFoQxdCGxe',
   ETH: '87uHZqfRkBfPKRgS6gV94UFn4KqUBVTSHb6HuNBPEXHW',
@@ -49,7 +50,43 @@ const MARKETS = {
   XRP: '6TdKK8mFg7pfX4xRXMPAXTYm2KbWHRQG9DPJjHHGHCeN',
 };
 
-const API = 'https://perp.jup.ag/v1';
+// Devnet market addresses — SOL is confirmed, others may not exist
+// Check https://jup.ag/devnet for current availability
+const MARKETS_DEVNET = {
+  SOL: 'E4v1BBgoso9s64TQvmyownAVJbhbEPGyz27zXFnzCn4i',   // devnet SOL-USDC perp
+  BTC: null,  // not available on devnet — will throw a clear error
+  ETH: null,
+  BNB: null,
+  XRP: null,
+};
+
+const MARKETS = IS_DEVNET ? MARKETS_DEVNET : MARKETS_MAINNET;
+
+// ── Wallet loading ────────────────────────────────────────────────
+let _kp = null;
+function getKeypair() {
+  if (_kp) return _kp;
+  if (!fs.existsSync(KEYPAIR_PATH))
+    throw new Error(
+      `Wallet not found: ${KEYPAIR_PATH}\n` +
+      (IS_DEVNET
+        ? 'Run: solana-keygen new --outfile wallet-devnet.json\n' +
+          'Then: solana airdrop 2 $(solana-keygen pubkey wallet-devnet.json) --url devnet'
+        : 'Set KEYPAIR_PATH in .env')
+    );
+  const raw = JSON.parse(fs.readFileSync(KEYPAIR_PATH, 'utf8'));
+  _kp = Keypair.fromSecretKey(Uint8Array.from(raw));
+  log(`[${NETWORK}] Wallet: ${_kp.publicKey.toBase58().slice(0, 10)}…`);
+  return _kp;
+}
+
+const connection = new Connection(RPC_URL, 'confirmed');
+
+// Log network on startup
+log(`[${NETWORK}] Jupiter wrapper initialised`);
+log(`[${NETWORK}] RPC: ${RPC_URL}`);
+log(`[${NETWORK}] API: ${API}`);
+log(`[${NETWORK}] Keypair: ${KEYPAIR_PATH}`);
 
 // ── Helper: sign + send a base64-encoded transaction ────────────
 async function signAndSend(txBase64) {
@@ -78,9 +115,13 @@ async function signAndSend(txBase64) {
 async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, stopLoss, takeProfit, leverage }) {
   const kp  = getKeypair();
   const mkt = MARKETS[asset];
-  if (!mkt) throw new Error(`Unknown asset: ${asset}`);
+  if (!mkt) throw new Error(
+    IS_DEVNET
+      ? `${asset} not available on Jupiter devnet — only SOL is supported. Switch asset or set DEVNET=false.`
+      : `Unknown asset: ${asset}`
+  );
 
-  log(`placeLimitOrder: ${side} ${asset} @ $${limitPrice} | Margin $${marginUSDC} | ${leverage}×`);
+  log(`[${NETWORK}] placeLimitOrder: ${side} ${asset} @ $${limitPrice} | Margin $${marginUSDC} | ${leverage}×`);
 
   const resp = await fetch(`${API}/orders`, {
     method: 'POST',
@@ -101,7 +142,7 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, stopLoss, 
 
   const { transaction, orderId } = await resp.json();
   const sig = await signAndSend(transaction);
-  log(`Order placed: ${orderId} | tx: ${sig}`);
+  log(`[${NETWORK}] Order placed: ${orderId} | tx: ${sig}`);
   return orderId;
 }
 
@@ -116,7 +157,7 @@ async function getOrderStatus(orderId) {
 // ── Cancel unfilled order ─────────────────────────────────────────
 async function cancelOrder(orderId) {
   const kp = getKeypair();
-  log(`cancelOrder: ${orderId}`);
+  log(`[${NETWORK}] cancelOrder: ${orderId}`);
   const resp = await fetch(`${API}/orders/${orderId}/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -125,7 +166,7 @@ async function cancelOrder(orderId) {
   if (!resp.ok) throw new Error(`cancelOrder ${resp.status}: ${await resp.text()}`);
   const { transaction } = await resp.json();
   await signAndSend(transaction);
-  log(`Cancelled: ${orderId}`);
+  log(`[${NETWORK}] Cancelled: ${orderId}`);
 }
 
 // ── Poll open position (SL/TP monitoring) ─────────────────────────
@@ -140,7 +181,7 @@ async function getPositionStatus(positionId) {
 // ── Close position (market exit) ──────────────────────────────────
 async function closePosition(positionId) {
   const kp = getKeypair();
-  log(`closePosition: ${positionId}`);
+  log(`[${NETWORK}] closePosition: ${positionId}`);
   const resp = await fetch(`${API}/positions/${positionId}/close`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -149,7 +190,7 @@ async function closePosition(positionId) {
   if (!resp.ok) throw new Error(`closePosition ${resp.status}: ${await resp.text()}`);
   const { transaction } = await resp.json();
   const sig = await signAndSend(transaction);
-  log(`Closed: ${positionId} | tx: ${sig}`);
+  log(`[${NETWORK}] Closed: ${positionId} | tx: ${sig}`);
 }
 
 module.exports = { placeLimitOrder, getOrderStatus, cancelOrder, getPositionStatus, closePosition };

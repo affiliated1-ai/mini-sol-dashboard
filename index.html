@@ -145,13 +145,14 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 #signal-toast{position:fixed; bottom:24px;right: 24px; background: var(--surface);border:.5px solid var(--border-strong); border-radius:10px;padding:12px 16px; font-size:13px;color:var(--text); line-height:1.5; box-shadow:0 4px 20px rgba(0,0,0,.18); max-width: 300px;z-index:9999;opacity:0;transform:translateY(12px); transition:opacity .3s, transform .3s; pointer-events:none}
 #signal-toast.toast-show{opacity:1;transform:translateY(0)}
 /* alert tracker */
-.alert-tracker-panel{width:100%;max-width:none;background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px}
+.alert-tracker-panel{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px}
 .at-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;font-weight:500}
 .at-score{font-size:11px;display:flex;gap:10px;color:var(--muted)}
 .at-list{display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto}
 .at-row{border-radius:6px;padding:7px 10px;font-size:11px;border-left:3px solid transparent;background:var(--surface2);display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start}
 .at-row.long-row{border-color:var(--green)}
 .at-row.short-row{border-color:var(--red)}
+.at-row.yellow-row{border-color:var(--yellow)}
 .at-detail{color:var(--muted);font-size:10px;line-height:1.5;margin-top:2px}
 .at-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
 .at-outcome{font-size:10px;font-weight:600;padding:1px 7px;border-radius:8px;white-space:nowrap}
@@ -159,7 +160,6 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 .at-outcome.loss{background:rgba(239,68,68,0.12);color:var(--red)}
 .at-outcome.open{background:rgba(245,158,11,0.12);color:var(--yellow)}
 .at-outcome.skip{background:var(--surface2);color:var(--muted)}
-.at-auto{color:var(--blue);font-size:11px;margin-right:2px}
 .at-wl{display:flex;gap:3px}
 .at-wl button{font-size:9px;padding:1px 5px;border-radius:4px;border:.5px solid currentColor;background:transparent;cursor:pointer;font-weight:600}
 .at-wl .w-btn{color:var(--green)}.at-wl .l-btn{color:var(--red)}.at-wl .s-btn{color:var(--muted)}
@@ -294,17 +294,17 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 
 <!-- ALERT TRACKER -->
 <div class="alert-tracker-panel">
-    <div class="at-header">
-        <span>Alert Tracker - Paper Evaluation</span>
-        <div class="at-score">
-            <span>Taken: <b id="at-taken">0W/0L</b></span>
-            <span>Not Taken: <b id="at-notaken">0W/0L</b></span>
-            <span>All: <b id="at-all-wr" style="color:var(--muted)">-%</b></span>
-        </div>
+  <div class="at-header">
+    <span>📡 Alert Tracker — Paper Evaluation</span>
+    <div class="at-score">
+      <span>Taken: <b id="at-taken">0W/0L</b></span>
+      <span>Not Taken: <b id="at-notaken">0W/0L</b></span>
+      <span>All: <b id="at-all-wr" style="color:var(--muted)">—%</b></span>
     </div>
-    <div class="at-list" id="at-list">
-        <div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 0">No signals yet this session.</div>
-    </div>
+  </div>
+  <div class="at-list" id="at-list">
+    <div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 0">No signals yet this session.</div>
+  </div>
 </div>
 
 <div class="tools-row">
@@ -481,9 +481,7 @@ let currentTF = '15m';
 let currentStrategyMode = 'adaptive';
 let htfSignalGlobal = 'yellow'; // Global HTF trend for gauge
 let trades = JSON.parse(localStorage.getItem('sol_trades_' + today()) || '[]');
-const alertLog = JSON.parse(localStorage.getItem('at_log_' + today()) || '[]');
-let lastSignalKey = null;
-let lastSignalContext = null;
+let lastSignal = null;
 let consecutiveGreen = 0;
 let cooldownBars = 0;
 let lastRedBar = null;
@@ -700,32 +698,32 @@ async function runLiveBacktest() {
                 regime = "RANGE_BOUND_SUPPORT";
             }
 
-    let entryOffset = getPullbackOffset(currentTF, cur_atr);
+            let entryOffset = 0.15;
             let tp1 = 0.25;
             let tp2 = 0.75;
             let slCoeff = 1.8;
             let size_pct = 0.4167; // standard sizing
 
             if (regime === "FLASH_CRASH") {
-            entryOffset = getPullbackOffset(currentTF, cur_atr);
+                entryOffset = 0.15;
                 tp1 = 0.25;
                 tp2 = 0.50;
                 slCoeff = 2.2;
                 size_pct = 0.104; // scale down to 10% sizing (~$25 margin size)
             } else if (regime === "MARKET_CHOP") {
-            entryOffset = getPullbackOffset(currentTF, cur_atr);
+                entryOffset = 0.10;
                 tp1 = 0.20;
                 tp2 = 0.45;
                 slCoeff = 1.5;
                 size_pct = 0.00; // Standby - do not trade!
             } else if (regime === "RANGE_BOUND_SUPPORT") {
-            entryOffset = getPullbackOffset(currentTF, cur_atr);
+                entryOffset = 0.15;
                 tp1 = 0.25;
                 tp2 = 0.75;
                 slCoeff = 1.8;
                 size_pct = 0.4167;
             } else if (regime === "BULL_TREND_DRIFT") {
-            entryOffset = getPullbackOffset(currentTF, cur_atr);
+                entryOffset = 0.15;
                 tp1 = 0.25;
                 tp2 = 1.00; // extended target!
                 slCoeff = 1.8;
@@ -927,8 +925,7 @@ async function runLiveBacktest() {
 Selectors
 */
 function selectAsset(btn, symbol, asset) {
-    lastSignalKey = null;
-    lastSignalContext = null;
+    lastSignal = null; lastSignalKey = null; // reset on asset change
     document.querySelectorAll('#asset-group .pill').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     currentSymbol = symbol;
@@ -937,6 +934,7 @@ function selectAsset(btn, symbol, asset) {
     load();
 }
 function selectTF(btn, tf) {
+    // Don't reset lastSignalKey on TF change — prevents re-fire
     document.querySelectorAll('#tf-group .pill').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     currentTF = tf;
@@ -1034,19 +1032,6 @@ function calcATR(highs, lows, closes, period=14) {
         if (i<period-1) return null;
         return tr.slice(i-period+1,i+1).reduce((a,b)=>a+b,0)/period;
     });
-}
-
-function getPullbackOffset(timeframe, atr) {
-    const limits = {
-        '5m': [0.03, 0.20],
-        '15m': [0.05, 0.20],
-        '30m': [0.05, 0.20],
-        '1h': [0.15, 0.40],
-        '4h': [0.20, 0.40]
-    };
-    const [min, max] = limits[timeframe] || limits['15m'];
-    const value = Number.isFinite(Number(atr)) ? Number(atr) * 0.25 : min;
-    return Math.min(max, Math.max(min, value));
 }
 
 function isATRExpanding(atrArr) {
@@ -1171,32 +1156,32 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
     }
 
     // Dynamic Parameter Optimization based on Regime
-    let entryOffset = getPullbackOffset(currentTF, curATR);
+    let entryOffset = 0.15;
     let tp1 = 0.25; // Fee-neutralized default
     let tp2 = 0.75; // Standard runner target
     let slCoeff = 1.8; // Stop loss ATR multiplier
     let recommendedMargin = 100.00; // Suggested margin in USD for a $240 base
 
     if (regime === "FLASH_CRASH") {
-            entryOffset = getPullbackOffset(currentTF, curATR);
+        entryOffset = 0.15;
         tp1 = 0.25;
         tp2 = 0.50; // Defensive runner target
         slCoeff = 2.2; // Wider SL to survive wick sweeps
         recommendedMargin = 25.00; // micro margin
     } else if (regime === "MARKET_CHOP") {
-            entryOffset = getPullbackOffset(currentTF, curATR);
+        entryOffset = 0.10;
         tp1 = 0.20;
         tp2 = 0.45;
         slCoeff = 1.5; // Tighter SL
         recommendedMargin = 0.00; // Standby — SIT ON HANDS!
     } else if (regime === "RANGE_BOUND_SUPPORT") {
-            entryOffset = getPullbackOffset(currentTF, curATR);
+        entryOffset = 0.15;
         tp1 = 0.25;
         tp2 = 0.75; // capture full bottom wicks
         slCoeff = 1.8;
         recommendedMargin = 100.00; // full size
     } else if (regime === "BULL_TREND_DRIFT") {
-            entryOffset = getPullbackOffset(currentTF, curATR);
+        entryOffset = 0.15;
         tp1 = 0.25;
         tp2 = 1.00; // ride the bullish momentum
         slCoeff = 1.8;
@@ -1290,7 +1275,6 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
         tp1,
         tp2,
         slCoeff,
-        atr: curATR,
         entryOffset,
         recommendedMargin
     };
@@ -1356,7 +1340,7 @@ function applySignal_V6_Original(sigObj, cciArr, cciUp, fishArr, fishUp, tenkUp,
     sig.className='big-signal '+signal; 
     lbl.className='sig-label '+signal;
 
-    const entryOffset = getPullbackOffset(currentTF, sigObj.atr);
+    const entryOffset = currentTF === '1h' ? 0.50 : 0.15;
     const isLong = signal === 'green';
     
     if (signal==='green') {
@@ -1449,7 +1433,7 @@ function applySignal(sigObj, cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma
         }
     }
 
-    const entryOffset = sigObj.entryOffset !== undefined ? sigObj.entryOffset : getPullbackOffset(currentTF, sigObj.atr);
+    const entryOffset = sigObj.entryOffset !== undefined ? sigObj.entryOffset : (lastVal(atr)||0.35)*0.25;
     const tp1 = sigObj.tp1 !== undefined ? sigObj.tp1 : 0.25;
     const tp2 = sigObj.tp2 !== undefined ? sigObj.tp2 : 0.75;
     const slCoeff = sigObj.slCoeff !== undefined ? sigObj.slCoeff : 1.8;
@@ -1569,7 +1553,6 @@ async function load() {
         const adxOK=curADX!=null&&curADX>45; // FIXED: Elevated from >25 to >45 for Sniper Gating
         const crossUp=isFisherCrossUp(fisher, fishSig);
         const sessionOK=isGoodSession();
-        const sessName=sessionOK ? 'Active' : 'Quiet';
 
         setInd('cci-val', 'cci-arr', lastVal(cci), cciUp);
         setInd('fish-val', 'fish-arr', lastVal(fisher), fishUp);
@@ -1688,7 +1671,7 @@ async function load() {
 
         const sigObj = calcSignal(cci, cciUp, fisher, fishUp, tenkUp, cur, curVWMA, curSMA50, volOK, atrOK, adxOK, crossUp, htfSignal, bullishCandle, cciDiv, fishDiv, cciAccel, lastBarTS, curADX, curATR);
         applySignal(sigObj, cci, cciUp, fisher, fishUp, tenkUp, cur, curVWMA, curSMA50, volOK, atrOK, adxOK, crossUp);
-        fireAlertIfChanged(sigObj.signal, cur, cciUp, fishUp, tenkUp, sigObj);
+        fireAlertIfChanged(sigObj.signal, cur, cciUp, fishUp, tenkUp);
 
         // Update Buy/Sell Status Blocks
         const buyBlock = document.getElementById('buy-signal-block');
@@ -1997,171 +1980,185 @@ async function sendTelegram(title, body, signal) {
     }
 }
 
+/*
+Alert Tracker — paper evaluates every signal using entry + TP from guidance
+*/
+const alertLog = JSON.parse(localStorage.getItem('at_log_'+today()) || '[]');
+
 function logAlert(signal, price, entryPrice, tpPrice, slPrice, entryOffset) {
-    if (signal !== 'green' && signal !== 'red') return;
+    if (signal === 'yellow') return; // only track actionable signals
     const entry = {
-        id: Date.now(),
+        id:          Date.now(),
         signal,
-        asset: currentAsset,
-        tf: currentTF,
+        asset:       currentAsset,
+        tf:          currentTF,
         signalPrice: price,
-        entryPrice,
-        tpPrice,
-        slPrice,
+        entryPrice,     // limit entry guidance
+        tpPrice,        // take profit guidance
+        slPrice,        // stop loss guidance
         entryOffset,
-        signalTime: Date.now(),
-        time: new Date().toLocaleTimeString(),
-        taken: null,
-        outcome: null,
-        autoEval: false
+        time:        new Date().toLocaleTimeString(),
+        taken:       null,   // true = taken, false = not taken (set by user)
+        outcome:     null,   // true = win, false = loss (manual or auto-eval)
+        autoEval:    false,  // true when auto-evaluated from subsequent bars
     };
     alertLog.unshift(entry);
     if (alertLog.length > 30) alertLog.pop();
-    localStorage.setItem('at_log_' + today(), JSON.stringify(alertLog));
+    localStorage.setItem('at_log_'+today(), JSON.stringify(alertLog));
     renderAlertTracker();
-
-    scheduleAlertEvaluation(entry);
-}
-
-function scheduleAlertEvaluation(entry) {
-    if (!entry || entry.outcome !== null) return;
-    const tfMins = {'5m': 5, '15m': 15, '30m': 30, '1h': 60, '4h': 240};
-    const dueAt = entry.signalTime + (tfMins[entry.tf] || 15) * 4 * 60 * 1000;
-    setTimeout(() => autoEvalAlert(entry.id), Math.max(0, dueAt - Date.now()));
+    // Schedule auto-evaluation in 4 bars (≈ timeframe × 4 minutes)
+    const tfMins = {5:5, 15:15, 30:30, 60:60, 240:240}[parseInt(currentTF)] || 15;
+    setTimeout(() => autoEvalAlert(entry.id), tfMins * 4 * 60 * 1000);
 }
 
 function markAlert(id, taken, outcome) {
-    const entry = alertLog.find(item => item.id === id);
+    const entry = alertLog.find(e => e.id === id);
     if (!entry) return;
-    entry.taken = taken;
-    entry.outcome = outcome;
-    localStorage.setItem('at_log_' + today(), JSON.stringify(alertLog));
-    renderAlertTracker();
-}
-
-function resetAlert(id) {
-    const entry = alertLog.find(item => item.id === id);
-    if (!entry) return;
-    entry.taken = null;
-    entry.outcome = null;
-    entry.autoEval = false;
-    localStorage.setItem('at_log_' + today(), JSON.stringify(alertLog));
+    if (taken !== undefined) entry.taken = taken;
+    if (outcome !== undefined) entry.outcome = outcome;
+    localStorage.setItem('at_log_'+today(), JSON.stringify(alertLog));
     renderAlertTracker();
 }
 
 async function autoEvalAlert(id) {
-    const entry = alertLog.find(item => item.id === id);
+    // Fetch a few bars after the signal and check if TP or SL was hit first
+    const entry = alertLog.find(e => e.id === id);
     if (!entry || entry.outcome !== null) return;
     try {
-        const res = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${entry.asset}USDT&interval=${entry.tf}&limit=20`);
+        const res = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${entry.asset}USDT&interval=${entry.tf}&limit=10`);
         if (!res.ok) return;
-        const bars = (await res.json())
-            .filter(bar => bar[0] > entry.signalTime)
-            .slice(0, 4);
+        const bars = await res.json();
         const isLong = entry.signal === 'green';
         for (const bar of bars) {
-            const high = parseFloat(bar[2]);
-            const low = parseFloat(bar[3]);
-            const tpHit = isLong ? high >= entry.tpPrice : low <= entry.tpPrice;
-            const slHit = isLong ? low <= entry.slPrice : high >= entry.slPrice;
-            if (tpHit || slHit) {
-                entry.outcome = tpHit ? true : false;
-                entry.autoEval = true;
-                break;
-            }
+            const h = parseFloat(bar[2]);
+            const l = parseFloat(bar[3]);
+            // Did TP get hit?
+            const tpHit = isLong ? h >= entry.tpPrice : l <= entry.tpPrice;
+            // Did SL get hit?
+            const slHit = isLong ? l <= entry.slPrice : h >= entry.slPrice;
+            if (tpHit && !slHit) { entry.outcome = true;  entry.autoEval = true; break; }
+            if (slHit && !tpHit) { entry.outcome = false; entry.autoEval = true; break; }
+            if (tpHit && slHit)  { entry.outcome = true;  entry.autoEval = true; break; } // assume TP first if same bar
         }
-        localStorage.setItem('at_log_' + today(), JSON.stringify(alertLog));
+        localStorage.setItem('at_log_'+today(), JSON.stringify(alertLog));
         renderAlertTracker();
-    } catch (e) {
-        console.warn('Alert paper evaluation failed:', e.message);
-    }
+    } catch(e) {}
 }
 
 function renderAlertTracker() {
     const list = document.getElementById('at-list');
     if (!list) return;
     if (alertLog.length === 0) {
-        list.innerHTML = '<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 0">No signals yet this session.</div>';
-    } else {
-        list.innerHTML = alertLog.slice(0, 15).map(entry => {
-            const isLong = entry.signal === 'green';
-            const rowClass = isLong ? 'long-row' : 'short-row';
-            const direction = isLong ? 'LONG' : 'SHORT';
-            const outcomeLabel = entry.outcome === true
-                ? `<span class="at-outcome win">WIN${entry.autoEval ? ' ⚡' : ''}</span>`
-                : entry.outcome === false
-                    ? `<span class="at-outcome loss">LOSS${entry.autoEval ? ' ⚡' : ''}</span>`
-                    : '<span class="at-outcome open">OPEN</span>';
-            const takenLabel = entry.taken === true
-                ? '<span class="at-outcome win" style="font-size:9px">TAKEN</span>'
-                : entry.taken === false
-                    ? '<span class="at-outcome skip" style="font-size:9px">SKIPPED</span>'
-                    : '<span class="at-outcome open" style="font-size:9px">?</span>';
-            const buttons = entry.outcome === null
-                ? `<div class="at-wl">
-                    <button class="w-btn" onclick="markAlert(${entry.id}, true, true)" title="Win, taken">✓T</button>
-                    <button class="l-btn" onclick="markAlert(${entry.id}, true, false)" title="Loss, taken">✗T</button>
-                    <button class="w-btn" onclick="markAlert(${entry.id}, false, true)" title="Win, not taken">✓N</button>
-                    <button class="l-btn" onclick="markAlert(${entry.id}, false, false)" title="Loss, not taken">✗N</button>
-                  </div>`
-                : `<div class="at-wl"><button class="s-btn" onclick="resetAlert(${entry.id})">Reset</button></div>`;
-            return `<div class="at-row ${rowClass}">
-                <div>
-                    <div style="font-weight:600;margin-bottom:2px">${direction} - ${entry.asset} - ${entry.tf} - ${entry.time}</div>
-                    <div class="at-detail">Signal: $${fmt(entry.signalPrice, 2)} - Entry: $${fmt(entry.entryPrice, 2)} (${Math.round((entry.entryOffset ?? getPullbackOffset(entry.tf, 0)) * 100)}c pullback)<br>TP: $${fmt(entry.tpPrice, 2)} - SL: $${fmt(entry.slPrice, 2)}</div>
-                </div>
-                <div class="at-right">${takenLabel}${outcomeLabel}${buttons}</div>
-            </div>`;
-        }).join('');
-    }
-
-    const taken = alertLog.filter(entry => entry.taken === true && entry.outcome !== null);
-    const notTaken = alertLog.filter(entry => entry.taken === false && entry.outcome !== null);
-    const evaluated = alertLog.filter(entry => entry.outcome !== null);
-    const wins = evaluated.filter(entry => entry.outcome === true).length;
-    document.getElementById('at-taken').textContent = `${taken.filter(entry => entry.outcome).length}W/${taken.filter(entry => !entry.outcome).length}L`;
-    document.getElementById('at-notaken').textContent = `${notTaken.filter(entry => entry.outcome).length}W/${notTaken.filter(entry => !entry.outcome).length}L`;
-    const winRate = evaluated.length ? Math.round((wins / evaluated.length) * 100) : 0;
-    const allRate = document.getElementById('at-all-wr');
-    allRate.textContent = evaluated.length ? winRate + '%' : '-%';
-    allRate.style.color = evaluated.length ? (winRate >= 50 ? 'var(--green)' : 'var(--red)') : 'var(--muted)';
-}
-
-function fireAlertIfChanged(signal, price, cciUp, fishUp, tenkUp, sigObj) {
-    const context = `${currentSymbol}|${currentTF}`;
-    const key = `${signal}|${context}`;
-    if (lastSignalContext !== context) {
-        lastSignalContext = context;
-        lastSignalKey = key;
+        list.innerHTML = '<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 0">No signals yet.</div>';
         return;
     }
+
+    list.innerHTML = alertLog.slice(0, 15).map(e => {
+        const isLong = e.signal === 'green';
+        const rowCls = e.signal === 'green' ? 'long-row' : e.signal === 'red' ? 'short-row' : 'yellow-row';
+        const dir    = isLong ? '🟢 LONG' : '🔴 SHORT';
+        const outcomeLabel =
+            e.outcome === true  ? `<span class="at-outcome win">WIN${e.autoEval?' ⚡':''}</span>` :
+            e.outcome === false ? `<span class="at-outcome loss">LOSS${e.autoEval?' ⚡':''}</span>` :
+                                  `<span class="at-outcome open">OPEN</span>`;
+        const takenLabel =
+            e.taken === true  ? '<span class="at-outcome win" style="font-size:9px">TAKEN</span>' :
+            e.taken === false ? '<span class="at-outcome skip" style="font-size:9px">SKIPPED</span>' :
+                                '<span class="at-outcome open" style="font-size:9px">?</span>';
+        const wlBtns = e.outcome === null ? `
+            <div class="at-wl">
+                <button class="w-btn" onclick="markAlert(${e.id}, true,  true)"  title="Mark Win — Taken">✓T</button>
+                <button class="l-btn" onclick="markAlert(${e.id}, true,  false)" title="Mark Loss — Taken">✗T</button>
+                <button class="w-btn" onclick="markAlert(${e.id}, false, true)"  title="Mark Win — Not Taken">✓N</button>
+                <button class="l-btn" onclick="markAlert(${e.id}, false, false)" title="Mark Loss — Not Taken">✗N</button>
+            </div>` : `<div class="at-wl"><button class="s-btn" onclick="resetAlert(${e.id})">↩</button></div>`;
+
+        return `<div class="at-row ${rowCls}">
+            <div>
+                <div style="font-weight:600;margin-bottom:2px">${dir} · ${e.asset} · ${e.tf} · ${e.time}</div>
+                <div class="at-detail">
+                    Signal: $${fmt(e.signalPrice,2)} · Entry limit: $${fmt(e.entryPrice,2)} (${Math.round((e.entryOffset||0.15)*100)}¢ pullback)<br>
+                    TP: $${fmt(e.tpPrice,2)} · SL: $${fmt(e.slPrice,2)}
+                </div>
+            </div>
+            <div class="at-right">
+                ${takenLabel}
+                ${outcomeLabel}
+                ${wlBtns}
+            </div>
+        </div>`;
+    }).join('');
+
+    // Scores
+    const taken    = alertLog.filter(e => e.taken === true  && e.outcome !== null);
+    const notTaken = alertLog.filter(e => e.taken === false && e.outcome !== null);
+    const all      = alertLog.filter(e => e.outcome !== null);
+    const takenW   = taken.filter(e => e.outcome === true).length;
+    const notW     = notTaken.filter(e => e.outcome === true).length;
+    const allW     = all.filter(e => e.outcome === true).length;
+
+    const el1 = document.getElementById('at-taken');
+    const el2 = document.getElementById('at-notaken');
+    const el3 = document.getElementById('at-all-wr');
+    if (el1) el1.textContent = `${takenW}W/${taken.length-takenW}L`;
+    if (el2) el2.textContent = `${notW}W/${notTaken.length-notW}L`;
+    if (el3) {
+        const wr = all.length > 0 ? Math.round((allW/all.length)*100) : 0;
+        el3.textContent = wr+'%';
+        el3.style.color = wr >= 50 ? 'var(--green)' : 'var(--red)';
+    }
+}
+
+function resetAlert(id) {
+    const entry = alertLog.find(e => e.id === id);
+    if (!entry) return;
+    entry.outcome = null; entry.taken = null; entry.autoEval = false;
+    localStorage.setItem('at_log_'+today(), JSON.stringify(alertLog));
+    renderAlertTracker();
+}
+
+function fireAlertIfChanged(signal, price, cciUp, fishUp, tenkUp) {
+    // Composite key: signal + asset + timeframe
+    // This prevents TF switches from re-firing an unchanged signal
+    const key = `${signal}|${currentSymbol}|${currentTF}`;
     if (key === lastSignalKey) return;
-    const previousSignal = lastSignalKey ? lastSignalKey.split('|')[0] : null;
+    const prevKey = lastSignalKey;
+    const prev    = lastSignal;
     lastSignalKey = key;
-    if (previousSignal === null) return;
+    lastSignal    = signal;
+    // Silent on very first load per asset/TF combination
+    if (prevKey === null || prev === null) return;
+    // Also silent if only the TF changed but signal colour is the same
+    // e.g. switching 5m→15m both showing green — don't re-alert
+    const prevSignal = prevKey ? prevKey.split('|')[0] : null;
+    if (prevSignal === signal && prevKey.split('|')[1] === currentSymbol) return;
     
     beep(signal);
     
     const emoji = signal === 'green' ? '🟩' : signal === 'yellow' ? '🟨' : '🟥';
-    const label = signal === 'green' ? 'GREEN Falcon Long' : signal === 'yellow' ? 'YELLOW Cash Standby' : 'RED Falcon Short';
+    const label = signal === 'green' ? 'REVERSAL HOOK LONG' : signal === 'yellow' ? 'YELLOW — Standby' : 'REVERSAL HOOK SHORT';
     
     // 1. Gather live ATR for dynamic bracket offsets
     const atrValEl = document.getElementById('atr-val');
-    const curATRVal = Number(sigObj.atr) || (atrValEl ? (parseFloat(atrValEl.textContent) || 0.35) : 0.35);
+    const curATRVal = atrValEl ? (parseFloat(atrValEl.textContent) || 0.35) : 0.35;
     const isLong = signal === 'green';
     
-    // 2. Use the same ATR-based entry guidance shown by the signal panel
-    const entryOffset = sigObj.entryOffset ?? getPullbackOffset(currentTF, curATRVal);
+    // 2. ATR-based dynamic pullback offset (replaces fixed 15¢)
+    // Formula: ATR × 0.25, clamped to [0.05, 0.40]
+    // On 15m SOL: typical ATR=$0.35 → offset=$0.09 (realistic fill rate)
+    // On  1h SOL: typical ATR=$1.00 → offset=$0.25 (appropriate for 1h range)
+    const rawOffset = curATRVal * 0.25;
+    const minOffset = currentTF === '5m' ? 0.03 : currentTF === '1h' ? 0.15 : 0.05;
+    const maxOffset = currentTF === '1h' ? 0.40 : 0.20;
+    const entryOffset = Math.max(minOffset, Math.min(rawOffset, maxOffset));
     const entryPrice = isLong ? price - entryOffset : price + entryOffset;
-    
+
     // 3. Dynamic Stop Loss (SL) & Take Profit (TP) calculations
-    const slMult = sigObj.slCoeff ?? 1.8;
-    const tpOffset = sigObj.tp2 ?? curATRVal * 2;
+    const slMult = currentTF === '1h' ? 2.0 : 1.8;
+    const tpOffset = curATRVal * (currentTF === '1h' ? 3.0 : 2.0);
     
     const tpPrice = isLong ? entryPrice + tpOffset : entryPrice - tpOffset;
     const slPrice = isLong ? entryPrice - (slMult * curATRVal) : entryPrice + (slMult * curATRVal);
-
-    logAlert(signal, price, entryPrice, tpPrice, slPrice, entryOffset);
     
     // 4. Generate visual confirmation cues
     const inds = [cciUp ? 'CCI ↑' : 'CCI ↓', fishUp ? 'Fisher ↑' : 'Fisher ↓', tenkUp ? 'Tenkan ↑' : 'Tenkan ↓'].join(' | ');
@@ -2172,13 +2169,13 @@ function fireAlertIfChanged(signal, price, cciUp, fishUp, tenkUp, sigObj) {
     if (signal === 'green') {
         body += `🎯 <b>LONG SNIPER ENTRY ACTIVE</b>\n`;
         body += `▪️ <b>Limit Entry Price</b>: $${fmt(entryPrice, 2)}\n`;
-        body += `▪️ <b>Take Profit (Target)</b>: $${fmt(tpPrice, 2)} (+${Math.round(tpOffset * 100)}¢)\n`;
+        body += `▪️ <b>Take Profit (Target)</b>: $${fmt(tpPrice, 2)} (+${currentTF === '1h' ? '3.0x ATR' : '30¢'})\n`;
         body += `▪️ <b>Stop Loss (Dynamic)</b>: $${fmt(slPrice, 2)} (-${slMult}x ATR)\n\n`;
         body += `⚖️ <b>Position Risk Allocation</b>:\n${scoreNote}`;
     } else if (signal === 'red') {
         body += `🎯 <b>SHORT SNIPER ENTRY ACTIVE</b>\n`;
         body += `▪️ <b>Limit Entry Price</b>: $${fmt(entryPrice, 2)}\n`;
-        body += `▪️ <b>Take Profit (Target)</b>: $${fmt(tpPrice, 2)} (-${Math.round(tpOffset * 100)}¢)\n`;
+        body += `▪️ <b>Take Profit (Target)</b>: $${fmt(tpPrice, 2)} (-${currentTF === '1h' ? '3.0x ATR' : '30¢'})\n`;
         body += `▪️ <b>Stop Loss (Dynamic)</b>: $${fmt(slPrice, 2)} (+${slMult}x ATR)\n\n`;
         body += `⚖️ <b>Position Risk Allocation</b>:\n${scoreNote}`;
     } else {
@@ -2198,7 +2195,10 @@ function fireAlertIfChanged(signal, price, cciUp, fishUp, tenkUp, sigObj) {
     }
     
     showToast(emoji + ' ' + label, body);
-    
+
+    // Log to alert tracker with entry/TP/SL guidance for paper evaluation
+    logAlert(signal, price, entryPrice, tpPrice, slPrice, entryOffset);
+
     // Push alert directly to Telegram bot (Only Green/Red entries to respect manual focus)
     if (signal === 'green' || signal === 'red') {
         sendTelegram(emoji + ' ' + label, body, signal);
@@ -2247,16 +2247,6 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
     saveZoom(id);
     const upColor = '#16a34a';
     const downColor = '#dc2626';
-    const visibleBars = ohlcData.slice(-60);
-    const visibleValues = visibleBars.flatMap(d => [d.h, d.l]);
-    [tenkanXY, vwmaXY, sma50XY].forEach(series => {
-        series.slice(-60).forEach(point => {
-            if (Number.isFinite(point.y)) visibleValues.push(point.y);
-        });
-    });
-    const visibleMin = Math.min(...visibleValues);
-    const visibleMax = Math.max(...visibleValues);
-    const visiblePadding = (visibleMax - visibleMin) * 0.08 || visibleMax * 0.01;
     if(charts[id])charts[id].destroy();
     charts[id] = new Chart(document.getElementById(id), {
         type: 'candlestick',
@@ -2308,11 +2298,6 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
             animation: { duration: 0 },
             plugins: {
                 legend: { display: false },
-                zoom: {
-                    pan: { enabled: true, mode: 'x' },
-                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
-                    limits: { x: { minRange: 5 } }
-                },
                 tooltip: {
                     mode: 'index',
                     intersect: false,
@@ -2338,9 +2323,7 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
                 y: {
                     grid: { color: gridColor() },
                     ticks: { color: tickColor(), font: { size: 10 }, callback: v => '$'+fmt(v,0) },
-                    border: { display: false },
-                    min: visibleMin - visiblePadding,
-                    max: visibleMax + visiblePadding
+                    border: { display: false }
                 }
             }
         }
@@ -2392,10 +2375,6 @@ document.getElementById('trade-list').addEventListener('click', function(e) {
     if(!isNaN(id)) deleteTrade(id);
 });
 
-onTypeChange();
-renderTrades();
-renderAlertTracker();
-alertLog.forEach(scheduleAlertEvaluation);
 updateAlertBtn();
 load();
 setInterval(load, 30000);
