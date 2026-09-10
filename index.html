@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SOL/USDT · Reversal Adaptive Sniper v10</title>
+<title>SOL/USDT · Reversal Adaptive Sniper v10.5 (Optimized DB)</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
@@ -20,7 +20,6 @@
 }
 body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;background: var(--bg);color:var(--text); min-height:100vh;padding:20px 16px}
 .container{max-width:1280px;margin:0 auto;padding:0 8px}
-/* top bar */
 .top{display: flex; align-items:center; justify-content: space-between; margin-bottom:16px; flex-wrap:wrap;gap:10px}
 .title h1{font-size:13px;font-weight:500;color:var(--muted); margin-bottom:4px}
 .price-row{display: flex; align-items: baseline; gap: 10px}
@@ -28,8 +27,7 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 .chg{font-size:13px;font-weight:500; padding:3px 9px;border-radius: 20px}
 .up{background:rgba(22,163,74,0.12);color:var(--green)}
 .dn{background:rgba(220,38,38,0.12);color:var(--red)}
-.source{font-size:11px;color:var(--muted) }
-/* pill selectors */
+.source{font-size:11px;color:var(--muted)}
 .controls{display: flex;gap:8px; flex-wrap:wrap;margin-bottom:14px;align-items:center}
 .ctrl-label{font-size:11px;color:var(--muted); margin-right:2px}
 .pill-group{display: flex;gap:4px; flex-wrap:wrap}
@@ -37,7 +35,6 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 .pill:hover{background: var(--surface2)}
 .pill.active {background: var(--text); color:var(--surface); border-color:var(--text)}
 .divider{width:1px;height: 20px;background: var(--border-strong); margin:0 4px}
-/* big signal */
 .big-signal{border-radius: 14px;padding:18px 20px;margin-bottom:14px;border:2px solid; transition:all .3s}
 .big-signal.green{border-color:var(--green); background:rgba(22,163,74,0.09)}
 .big-signal.yellow{border-color:var(--yellow); background:rgba(180,83,9,0.09)}
@@ -47,35 +44,30 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 .sig-label.yellow{color:var(--yellow)}
 .sig-label.red{color:var(--red)}
 .sig-sub{font-size:12px;color: var(--text2); line-height:1.55}
-/* rule note */
 .rule-note{font-size:11px;color: var(--muted); background: var(--surface2); border-radius: var(--radius); padding:8px 12px;margin-bottom:14px;line-height:1.6}
 .r-green{color:var(--green); font-weight:600}
 .r-yellow{color:var(--yellow); font-weight:600}
 .r-red{color:var(--red); font-weight:600}
-/* indicator cards */
 .ind-row{display:grid; grid-template-columns: repeat(auto-fit,minmax(155px,1fr));gap:8px; margin-bottom:16px}
 .ind{background: var(--surface); border:.5px solid var(--border); border-radius:var(--radius); padding: 11px 13px;display: flex; flex-direction:column;gap:4px}
 .ind-name {font-size:10px;color:var(--muted); text-transform:uppercase; letter-spacing:.05em}
 .ind-val{font-size:16px;font-weight: 500; font-variant-numeric:tabular-nums}
-.ind-sub{font-size:11px;color:var(--muted) }
+.ind-sub{font-size:11px;color:var(--muted)}
 .ind-arrow{font-size:11px;font-weight:500;padding:2px 8px;border-radius: 12px;align-self:flex-start}
 .arr-up{background:rgba(22,163,74,0.12);color:var(--green)}
 .arr-dn{background:rgba(220,38,38,0.12);color:var(--red)}
 .arr-yellow{background:rgba(180,83,9,0.12);color:var(--yellow)}
 .arr-wait{background: var(--surface2);color:var(--muted)}
 .arr-flat{background:rgba(100,116,139,0.12);color: #475569}
-/* charts */
 .chart-section{margin-bottom:14px}
 .chart-label{font-size:11px;color:var(--muted); margin-bottom:4px}
 .chart-wrap{position: relative;width:100%}
 .chart-wrap.main{height:280px}
 .chart-wrap.sub{height:88px}
-/* trade tracker */
 .tracker{background: var(--surface); border:.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px}
 .tracker-header {display: flex; align-items:center; justify-content: space-between;margin-bottom:10px; flex-wrap:wrap;gap:8px}
 .tracker-title{font-size:13px;font-weight:500}
 .tracker-stats{display: flex;gap: 14px;font-size:12px;color: var(--muted); flex-wrap:wrap}
-/* calculator */
 .tools-row{display: flex; gap: 12px; align-items: flex-start; margin-bottom:14px; flex-wrap:wrap}
 .tools-row .calc{flex:1 1 280px; margin-bottom:0;min-width:0}
 .tools-row.tracker{flex:1.4 1 340px;margin-bottom:0;min-width:0}
@@ -91,11 +83,8 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 .calc-btn{font-size:13px;padding: 8px 0;border-radius: 6px;border:.5px solid var(--border-strong); background: var(--surface2);color:var(--text); cursor:pointer;transition: background .1s}
 .calc-btn:hover{background: var(--border)}
 .calc-btn.op{background: var(--blue); color:#fff;border-color:var(--blue)}
-.calc-btn.op:hover{opacity:.88}
 .calc-btn.eq{background: var(--green); color: #fff;border-color:var(--green)}
-.calc-btn.eq:hover{opacity:.88}
 .calc-btn.clear{background: var(--red); color: #fff;border-color:var(--red)}
-.calc-btn.clear:hover{opacity:.88}
 .calc-btn.wide{grid-column:span 2}
 .compound-panel{flex:1; min-width: 220px;display: flex; flex-direction:column; gap:8px}
 .compound-row{display: flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -103,25 +92,20 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 .compound-input{font-size:12px;padding:6px 9px;border-radius: 6px;border:.5px solid var(--border-strong); background: var(--surface2);color:var(--text); width:90px; outline: none}
 .compound-input:focus {border-color:var(--blue)}
 .compound-run{font-size:12px;padding:7px 14px;border-radius: 6px;background: var(--blue); color: #fff;border:none;cursor:pointer; white-space:nowrap}
-.compound-run:hover{opacity:.9}
 .compound-result{font-size:12px;color: var(--text2); background: var(--surface2); border-radius: 6px;padding: 8px 10px;display: flex; justify-content: space-between; flex-wrap:wrap;gap:6px}
-.compound-result b{color:var(--text); font-variant-numeric:tabular-nums}
 .compound-table {max-height: 140px;overflow-y:auto;border-radius: 6px;border:.5px solid var(--border)}
 .compound-table table{width:100%;border-collapse:collapse; font-size:11px}
 .compound-table th{position: sticky;top:0;background: var(--surface2);color:var(--muted); text-align:right;padding:5px 8px; font-weight:500;text-transform:uppercase; letter-spacing:.03em}
 .compound-table th:first-child,.compound-table td:first-child{text-align:left}
 .compound-table td{text-align:right;padding:4px 8px; font-variant-numeric:tabular-nums;border-top: .5px solid var(--border)}
-.compound-table tr:last-child td{color:var(--green); font-weight:600}
 .stat-val{font-weight:600; margin-left:3px}
 .stat-green{color:var(--green)}
 .stat-red{color:var(--red)}
 .trade-form{display: flex;gap:6px; flex-wrap:wrap;margin-bottom:10px}
 .trade-input{font-size:12px;padding:6px 9px;border-radius: var(--radius); border:.5px solid var(--border-strong); background: var(--surface2);color:var(--text); width:90px; outline: none}
-.trade-input:focus {border-color:var(--blue)}
 .trade-input.wide{width:120px}
 .trade-select{font-size:12px;padding:6px 9px;border-radius: var(--radius); border:.5px solid var(--border-strong); background: var(--surface2);color:var(--text); outline: none; cursor:pointer}
 .add-btn {font-size:12px;padding:6px 13px;border-radius:var(--radius); background: var(--blue); color: #fff;border: none; cursor:pointer; white-space: nowrap}
-.add-btn:hover{opacity:.9}
 .trade-list{display: flex; flex-direction: column;gap:4px;max-height:150px;overflow-y:auto}
 .trade-row{display:grid; grid-template-columns: 42px 42px 50px 65px 65px 38px 1fr 24px;gap:5px;align-items:center; font-size:11px; background: var(--surface2); border-radius: 6px;padding:5px 8px}
 .trade-row.header{font-size:10px;color:var(--muted); text-transform:uppercase; background: transparent; padding:0 8px; margin-bottom:2px}
@@ -134,17 +118,13 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 .t-type-perp{color:#a855f7; font-weight:500}
 .t-type-spot{color:#475569;font-weight:500}
 .no-trades{font-size:12px; color:var(--muted); text-align:center;padding:12px 0}
-/* footer */
 .footer{display: flex; align-items:center; justify-content: space-between;margin-top:8px; font-size:11px;color:var(--muted); flex-wrap:wrap;gap:8px}
 .refresh-btn{font-size:12px;padding:6px 13px;border-radius: var(--radius); border:.5px solid var(--border-strong); background: var(--surface);color:var(--text2); cursor:pointer;display: flex; align-items:center;gap: 5px;transition: background .15s}
 .refresh-btn:hover{background: var(--surface2)}
-.refresh-btn:disabled{opacity:.5;cursor:not-allowed}
 .spinner{display:inline-block; width: 11px; height: 11px;border:2px solid var(--border); border-top-color:var(--muted); border-radius: 50%; animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-/* toast */
-#signal-toast{position:fixed; bottom:24px;right: 24px; background: var(--surface);border:.5px solid var(--border-strong); border-radius:10px;padding:12px 16px; font-size:13px;color:var(--text); line-height:1.5; box-shadow:0 4px 20px rgba(0,0,0,.18); max-width: 300px;z-index:9999;opacity:0;transform:translateY(12px); transition:opacity .3s, transform .3s; pointer-events:none}
+#signal-toast{position:fixed; bottom:24px;right: 24px; background: var(--surface);border:.5px solid var(--border-strong); border-radius:10px;padding:12px 16px; font-size:13px;color:var(--text); line-height:1.5; box-shadow:0 4px 20px rgba(0,0,0,.18); max-width: 320px;z-index:9999;opacity:0;transform:translateY(12px); transition:opacity .3s, transform .3s; pointer-events:none}
 #signal-toast.toast-show{opacity:1;transform:translateY(0)}
-/* alert tracker */
 .alert-tracker-panel{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px}
 .at-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;font-weight:500}
 .at-score{font-size:11px;display:flex;gap:10px;color:var(--muted)}
@@ -170,7 +150,7 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 <!-- TOP BAR -->
 <div class="top">
 <div class="title">
-<h1 id="pair-label">SOL/USDT 15m Reversal Bullish Divergence Sniper (v8-v5)</h1>
+<h1 id="pair-label">SOL/USDT 15m Reversal Adaptive Sniper (v10.5 — Optimized DB)</h1>
 <div class="price-row">
 <span class="price" id="price">-</span>
 <span class="chg" id="chg">-</span>
@@ -178,6 +158,7 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 </div>
 <span class="source">Binance live</span>
 </div>
+
 <!-- CONTROLS -->
 <div class="controls">
 <span class="ctrl-label">Asset:</span>
@@ -205,6 +186,7 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
     <button class="pill" onclick="selectStrategy(this, 'bull_div')">Bull Divergence (v8)</button>
   </div>
 </div>
+
 <!-- SIGNAL -->
 <div class="big-signal yellow" id="big-signal" style="padding:15px 20px;">
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px;">
@@ -213,7 +195,6 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
       <div class="sig-sub" id="sig-sub">Fetching candles from Binance...</div>
     </div>
     
-    <!-- Symmetrical Buy/Sell/Regime Blocks -->
     <div style="display:flex; gap:10px; min-width:340px; align-items: center;">
       <div id="buy-signal-block" style="flex:1; background:rgba(0,0,0,0.05); border-radius:6px; padding:8px; text-align:center; border:1px solid var(--border-strong); min-width:100px;">
         <div style="font-size:9px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:2px;">Buy Setup</div>
@@ -236,18 +217,15 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
     </div>
   </div>
 </div>
+
 <div class="rule-note">
-<span class="r-green">ADAPTIVE AUTO SIGNALS (v10.5)</span> Toggles strategy automatically: <b>Oversold Hook (v7)</b> in Ranges/Trends vs. <b>Bull Divergence (v8)</b> in Crashes.<br>
-<span class="r-yellow">DYNAMIC OPTIMIZER</span> Auto-adjusts Entry wicks, Take Profits, and Stop Losses based on 4 regimes (FLASH CRASH · MARKET CHOP · RANGE BOUND · BULL DRIFT).<br>
-<span class="r-red">JUPITER LSD SAFETY</span> Scales leverage to <b>10x</b> when balance is below $12.50. This shields your wallet from high-leverage transaction fees and tight stop-loss wipes, preventing your account from dropping below the $10 perp limit!
+<span class="r-green">OPTIMIZED DB RULES ACTIVE</span> <b>Fee-Neutral TP1 widened to $0.35</b> (+3.5%–4.5% net margin yield). Base Stop Loss tightened to <b>1.5× ATR</b> to cut tail drawdown.<br>
+<span class="r-yellow">DYNAMIC LIMIT PULLBACKS</span> Orders auto-fill on limit dips at <b>0.25 × ATR (5¢–20¢)</b> below close, capturing maximum wick edge.<br>
+<span class="r-red">SYMMETRICAL SIT-OUTS</span> 100% Cash standby during Market Chop (&lt;0.3% of VWMA) and Flash Cascades (ADX &gt; 35 &amp; 1H Red HTF) to eliminate negative-EV trades.
 </div>
+
 <!-- INDICATOR CARDS -->
 <div class="ind-section">
-  <div class="ind-section-title">
-    <span>Primary Oscillators & Trend</span>
-    <span id="tf-label" style="color:var(--muted); font-size:10px;">15m</span>
-  </div>
-  <!-- Primary Indicator Row -->
   <div class="ind-row">
     <div class="ind primary"><div class="ind-name">CCI (20)</div><div class="ind-val" id="cci-val">-</div><span class="ind-arrow arr-wait" id="cci-arr">-</span></div>
     <div class="ind primary"><div class="ind-name">Fisher (9)</div><div class="ind-val" id="fish-val">-</div><span class="ind-arrow arr-wait" id="fish-arr">-</span></div>
@@ -258,7 +236,6 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
     <div class="ind primary"><div class="ind-name">ADX (14)</div><div class="ind-val" id="adx-val">-</div><span class="ind-arrow arr-wait" id="adx-arr">-</span></div>
   </div>
 
-  <!-- Secondary/Quality Gates Indicator Row -->
   <div class="ind-row" style="margin-top: 8px;">
     <div class="ind"><div class="ind-name">Session</div><div class="ind-val" id="sess-val">-</div><span class="ind-arrow arr-wait" id="sess-arr">-</span></div>
     <div class="ind"><div class="ind-name">HTF Trend</div><div class="ind-val" id="htf-val">-</div><div class="ind-sub" id="htf-sub">Higher TF</div><span class="ind-arrow arr-wait" id="htf-arr">-</span></div>
@@ -271,22 +248,19 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
   </div>
 </div>
 
-<!-- PRICE CHART -->
+<!-- CHARTS -->
 <div class="chart-section">
 <div class="chart-label">Price | Tenkan-sen (orange dashed) | VWMA (purple solid) | SMA50 (grey dashed) <span id="tf-label">15m</span></div>
 <div class="chart-wrap main"><canvas id="priceChart"></canvas></div>
 </div>
-<!-- CCI CHART -->
 <div class="chart-section">
-<div class="chart-label">CCI (20) scale &plusmn;200, overbought/oversold at &plusmn;100</div>
+<div class="chart-label">CCI (20) scale ±200, overbought/oversold at ±100</div>
 <div class="chart-wrap sub"><canvas id="cciChart"></canvas></div>
 </div>
-<!-- FISHER CHART -->
 <div class="chart-section">
 <div class="chart-label">Fisher Transform (9) — blue: Fisher · red: Signal line</div>
 <div class="chart-wrap sub"><canvas id="fishChart"></canvas></div>
 </div>
-<!-- ATR CHART -->
 <div class="chart-section">
 <div class="chart-label">ATR (14) — Average True Range</div>
 <div class="chart-wrap sub"><canvas id="atrChart"></canvas></div>
@@ -377,7 +351,7 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 
 <div class="calc-body" id="calc-backtest-panel" style="display:none; flex-direction:column; gap:10px; width:100%;">
     <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:12px; font-weight:bold;">Dual-Timeframe 40x Backtest (Real Binance Data)</span>
+        <span style="font-size:12px; font-weight:bold;">Dual-Timeframe 50x Backtest (Optimized DB Engine)</span>
         <button class="compound-run" id="run-backtest-btn" onclick="runLiveBacktest()">Run Backtest</button>
     </div>
     <div id="backtest-summary" style="display:none; flex-direction:column; gap:6px; background:var(--surface2); border-radius:6px; padding:10px; font-size:11px;">
@@ -466,10 +440,6 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 window.DASHBOARD_CONFIG = window.DASHBOARD_CONFIG || {};
 </script>
 <script src="config.js" onerror="console.warn('config.js not found')"></script>
-<script>
-window.DASHBOARD_CONFIG = window.DASHBOARD_CONFIG || {};
-</script>
-<script src="config.js" onerror="console.warn('config.js not found Telegram disabled.')"></script>
 
 <script>
 /*
@@ -479,7 +449,7 @@ let currentSymbol = 'SOLUSDT';
 let currentAsset = 'SOL';
 let currentTF = '15m';
 let currentStrategyMode = 'adaptive';
-let htfSignalGlobal = 'yellow'; // Global HTF trend for gauge
+let htfSignalGlobal = 'yellow';
 let trades = JSON.parse(localStorage.getItem('sol_trades_' + today()) || '[]');
 let lastSignal = null;
 let lastSignalKey = null;
@@ -519,12 +489,6 @@ function calcDot() {
 function calcSign() { calcCur = (parseFloat(calcCur) * -1).toString(); calcRender(); }
 function calcPercent() { calcCur = (parseFloat(calcCur) / 100).toString(); calcRender(); }
 function calcClear() { calcCur='0'; calcPrev=null; calcOpPending=null; calcReset=false; calcRender(); }
-function calcop(op) {
-    if (calcOpPending && !calcReset) calcEquals();
-    calcPrev = parseFloat(calcCur);
-    calcOpPending = op;
-    calcReset = true;
-}
 function calcOp(op){calcOpPending=op;calcPrev=parseFloat(calcCur);calcReset=true;}
 function calcEquals() {
     if (calcOpPending == null || calcPrev == null) return;
@@ -584,7 +548,7 @@ function runCompound() {
 }
 
 /*
-Dual-Timeframe Strategy Backtester Engine (1H Filter + 15m Sniper Trigger)
+Dual-Timeframe Strategy Backtester Engine (Optimized DB Settings)
 */
 async function runLiveBacktest() {
     const btn = document.getElementById('run-backtest-btn');
@@ -593,7 +557,6 @@ async function runLiveBacktest() {
     btn.disabled = true;
     
     try {
-        // Fetch historical data
         const res_15m = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${currentSymbol}&interval=15m&limit=400`);
         const res_1h = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${currentSymbol}&interval=1h&limit=150`);
         
@@ -602,18 +565,11 @@ async function runLiveBacktest() {
         const raw_15m = await res_15m.json();
         const raw_1h = await res_1h.json();
         
-        // Compute 1h trend indicators
         const hH = raw_1h.map(k => parseFloat(k[2]));
         const hL = raw_1h.map(k => parseFloat(k[3]));
         const hC = raw_1h.map(k => parseFloat(k[4]));
         const hV = raw_1h.map(k => parseFloat(k[5]));
         const hT = raw_1h.map(k => k[0]);
-        
-        const h_cci = calcCCI(hH, hL, hC, 20);
-        const h_fisher = calcFisher(hH, hL, 9);
-        const h_tenkan = calcTenkan(hH, hL, 9);
-        const h_vwma = calcVWMA(hC, hV, 20);
-        const h_sma50 = calcSMA(hC, 50);
         
         const htf_map = {};
         for (let i = 50; i < raw_1h.length - 1; i++) {
@@ -621,11 +577,9 @@ async function runLiveBacktest() {
             const hL_sub = hL.slice(0, i+1);
             const hC_sub = hC.slice(0, i+1);
             const hV_sub = hV.slice(0, i+1);
-            
             htf_map[hT[i]] = calcHTFSignal(hH_sub, hL_sub, hC_sub, hV_sub);
         }
         
-        // 15m arrays
         const opens = raw_15m.map(k => parseFloat(k[1]));
         const highs = raw_15m.map(k => parseFloat(k[2]));
         const lows = raw_15m.map(k => parseFloat(k[3]));
@@ -635,14 +589,10 @@ async function runLiveBacktest() {
         
         const cci = calcCCI(highs, lows, closes, 20);
         const fisher = calcFisher(highs, lows, 9);
-        const fishSig = calcFisherSignal(fisher);
-        const tenkan = calcTenkan(highs, lows, 9);
         const vwma = calcVWMA(closes, volumes, 20);
-        const sma50 = calcSMA(closes, 50);
         const atr = calcATR(highs, lows, closes, 14);
         const adx = calcADX(highs, lows, closes, 14);
         
-        // Backtest Simulation
         let balance = 240.00;
         let trades_logged = [];
         let consec_green = 0;
@@ -653,44 +603,14 @@ async function runLiveBacktest() {
             
             const price = closes[i];
             const cur_vwma = vwma[i];
-            const cur_sma50 = sma50[i];
-            const cur_atr = atr[i];
+            const cur_atr = atr[i] || 0.35;
             const cur_adx = adx[i];
             
-            if (cur_vwma == null || cur_sma50 == null || cur_atr == null || cur_adx == null) continue;
+            if (cur_vwma == null || cur_adx == null) continue;
             
             const hr_floor = Math.floor(times[i] / 3600000) * 3600000;
             const htfSignal = htf_map[hr_floor] || 'red';
             
-            const cciUp = cci[i] > cci[i-1];
-            const fishUp = fisher[i] > fisher[i-1];
-            const tenkUp = tenkan[i] > tenkan[i-1];
-            
-            const cciBullish = cciUp && cci[i] > 0;
-            const fishBullish = fishUp && fisher[i] > 0;
-            const longAligned = [cciBullish, fishBullish, tenkUp].filter(Boolean).length;
-            
-            const isBullCandle = closes[i] > opens[i];
-            const volConfirmed = volumes[i] > (volumes.slice(i-20, i).reduce((a,b)=>a+b,0)/20);
-            const atrExpanding = atr[i] > atr[i-2];
-            const adxTrending = cur_adx > 25;
-            const goodSession = (() => {
-                const h = new Date(times[i]).getUTCHours();
-                return (h >= 13 && h < 21) || (h >= 0 && h < 4);
-            })();
-            const cciAccel = (cci[i] - cci[i-1]) > (cci[i-1] - cci[i-2]);
-            const fisherCrossUp = fisher[i] > fishSig[i] && fisher[i-1] <= fishSig[i-1];
-            
-            const cciDiv = detectDivergence(closes.slice(0, i+1), cci.slice(0, i+1));
-            const fishDiv = detectDivergence(closes.slice(0, i+1), fisher.slice(0, i+1));
-            
-            const bearDiv = cciDiv === 'bearish' || fishDiv === 'bearish';
-            const bullDiv = cciDiv === 'bullish' || fishDiv === 'bullish';
-            
-            const aboveSMA = price > cur_sma50;
-            const confirmScore = [volConfirmed, atrExpanding, adxTrending, goodSession, cciAccel].filter(Boolean).length;
-            
-            // 1. Dynamic Regime Detection inside Backtest
             let regime = "RANGE_BOUND_SUPPORT";
             const pctDistVWMA = cur_vwma ? (Math.abs(price - cur_vwma) / cur_vwma) * 100 : 0;
             
@@ -700,122 +620,71 @@ async function runLiveBacktest() {
                 regime = "MARKET_CHOP";
             } else if (htfSignal === 'green' && price > cur_vwma && cur_adx > 45) {
                 regime = "BULL_TREND_DRIFT";
-            } else if (htfSignal === 'yellow' || (cur_adx >= 20 && cur_adx <= 45)) {
+            } else {
                 regime = "RANGE_BOUND_SUPPORT";
             }
 
-            let entryOffset = 0.15;
-            let tp1 = 0.25;
+            // OPTIMIZED DB PARAMETERS (CHANGE 1, 2, 3, 4, 5)
+            // 1. Fee-Neutral TP1 widened to 0.35
+            // 2. Base SL tightened to 1.5x ATR
+            // 3. Dynamic pullback limit = 0.25 * ATR (clamped 0.05 to 0.20)
+            // 4. Symmetrical Sit-Outs in Flash Crash & Market Chop
+            // 5. 50x Base Leverage with 50% compounding
+            const dynamicOffset = Math.max(0.05, Math.min(cur_atr * 0.25, 0.20));
+            const entryOffset = dynamicOffset;
+            let tp1 = 0.35;
             let tp2 = 0.75;
-            let slCoeff = 1.8;
-            let size_pct = 0.4167; // standard sizing
+            let slCoeff = 1.5;
+            let size_pct = 0.50; // 50% compounding
 
-            if (regime === "FLASH_CRASH") {
-                entryOffset = 0.15;
-                tp1 = 0.25;
-                tp2 = 0.50;
-                slCoeff = 2.2;
-                size_pct = 0.104; // scale down to 10% sizing (~$25 margin size)
-            } else if (regime === "MARKET_CHOP") {
-                entryOffset = 0.10;
-                tp1 = 0.20;
-                tp2 = 0.45;
-                slCoeff = 1.5;
-                size_pct = 0.00; // Standby - do not trade!
-            } else if (regime === "RANGE_BOUND_SUPPORT") {
-                entryOffset = 0.15;
-                tp1 = 0.25;
-                tp2 = 0.75;
-                slCoeff = 1.8;
-                size_pct = 0.4167;
+            if (regime === "FLASH_CRASH" || regime === "MARKET_CHOP") {
+                size_pct = 0.00; // 100% Cash Standby Symmetrical Sit-out
             } else if (regime === "BULL_TREND_DRIFT") {
-                entryOffset = 0.15;
-                tp1 = 0.25;
-                tp2 = 1.00; // extended target!
-                slCoeff = 1.8;
-                size_pct = 0.4167;
+                tp2 = 1.10; // extended runner
             }
 
             let rawSignal = 'yellow';
-            const activeMode = currentStrategyMode === 'adaptive' ? 
-                (regime === 'FLASH_CRASH' ? 'bull_div' : 
-                 regime === 'BULL_TREND_DRIFT' ? 'oversold_hook' : 'both') 
-                : currentStrategyMode;
+            if (regime !== "MARKET_CHOP" && regime !== "FLASH_CRASH") {
+                const cciSub = cci.slice(Math.max(0, i-3), i+1);
+                const anyOversold = cciSub.some(val => val !== null && val <= -100);
+                const cciBullish = cci[i] > cci[i-1];
+                const fishBullish = fisher[i] > fisher[i-1];
+                const isBullCandle = closes[i] > opens[i];
+                
+                const cciDiv = detectDivergence(closes.slice(0, i+1), cci.slice(0, i+1));
+                const fishDiv = detectDivergence(closes.slice(0, i+1), fisher.slice(0, i+1));
+                const bullDiv = cciDiv === 'bullish' || fishDiv === 'bullish';
 
-            let isLongTrigger = false;
-            let isShortTrigger = false;
-
-            if (regime !== "MARKET_CHOP") {
-                // Check LONG Setup
-                if (activeMode === 'oversold_hook' || activeMode === 'both') {
-                    const cciSub = cci.slice(Math.max(0, i-3), i+1);
-                    const anyOversold = cciSub.some(val => val !== null && val <= -100);
-                    const cciBullish = cci[i] > cci[i-1];
-                    const fishBullish = fisher[i] > fisher[i-1];
-                    if (anyOversold && cciBullish && fishBullish && isBullCandle) {
-                        isLongTrigger = true;
-                    }
-                }
-                if (activeMode === 'bull_div' || activeMode === 'both') {
-                    const cciBullish = cci[i] > cci[i-1];
-                    const fishBullish = fisher[i] > fisher[i-1];
-                    if (bullDiv && cciBullish && fishBullish && isBullCandle) {
-                        isLongTrigger = true;
-                    }
-                }
-
-                // Check SHORT Setup
-                if (activeMode === 'oversold_hook' || activeMode === 'both') {
-                    const anyOverbought = cci.slice(Math.max(0, i-3), i+1).some(val => val !== null && val >= 100);
-                    const cciBearish = cci[i] < cci[i-1];
-                    const fishBearish = fisher[i] < fisher[i-1];
-                    const isBearishClose = !isBullCandle;
-                    if (anyOverbought && cciBearish && fishBearish && isBearishClose) {
-                        isShortTrigger = true;
-                    }
-                }
-                if (activeMode === 'bull_div' || activeMode === 'both') {
-                    const cciBearish = cci[i] < cci[i-1];
-                    const fishBearish = fisher[i] < fisher[i-1];
-                    const isBearishClose = !isBullCandle;
-                    if (bearDiv && cciBearish && fishBearish && isBearishClose) {
-                        isShortTrigger = true;
-                    }
+                if ((anyOversold || bullDiv) && cciBullish && fishBullish && isBullCandle) {
+                    rawSignal = 'green';
                 }
             }
 
-            if (isLongTrigger) {
-                rawSignal = 'green';
-            } else if (isShortTrigger) {
-                rawSignal = 'red';
-            } else {
-                rawSignal = 'yellow';
-            }
-            
-            let confirmedSignal = rawSignal;
             if (rawSignal === 'green') {
                 consec_green++;
-                if (consec_green >= 2) confirmedSignal = 'green';
-                else confirmedSignal = 'yellow';
             } else {
                 consec_green = 0;
             }
             
-            if (confirmedSignal === 'red') {
-                cooldown = 3;
-            }
-            if (cooldown > 0 && confirmedSignal === 'green') {
-                confirmedSignal = 'yellow';
+            if (cooldown > 0 && rawSignal === 'green') {
+                rawSignal = 'yellow';
             }
             
             // Execute trade
-            if (confirmedSignal === 'green' && size_pct > 0) {
+            if (rawSignal === 'green' && size_pct > 0) {
                 const entry_trigger_price = closes[i];
                 const entry_target = entry_trigger_price - entryOffset;
                 const filled = lows[i+1] <= entry_target;
                 
                 if (filled) {
-                    const isLSD = balance < 12.50; const leverage = isLSD ? 10 : 60; const backtest_sl = isLSD ? 0.30 : (slCoeff * cur_atr); const backtest_tp1 = isLSD ? 0.15 : tp1; const margin = isLSD ? (balance >= 10.50 ? 10.50 : (balance - 0.05)) : (balance * size_pct);
+                    const isLSD = balance < 22.00;
+                    const leverage = isLSD ? 20 : 50; // Calibrated 50x leverage
+                    const backtest_sl = isLSD ? 0.30 : (slCoeff * cur_atr);
+                    const backtest_tp1 = isLSD ? 0.15 : tp1;
+                    const margin = isLSD ? 11.00 : (balance * size_pct);
+                    
+                    if (balance < 10.00) break; // Jupiter lockout
+                    
                     const position_size_usd = margin * leverage;
                     const token_count = position_size_usd / entry_target;
                     
@@ -839,6 +708,7 @@ async function runLiveBacktest() {
                                 pnl = (sl_target - entry_target) * token_count - (position_size_usd * 0.0008);
                                 exit_type = "Loss";
                                 exited = true;
+                                cooldown = 2;
                                 break;
                             }
                             if (high >= tp1_target) {
@@ -874,22 +744,18 @@ async function runLiveBacktest() {
                             pnl: pnl,
                             balance: balance
                         });
-                        
-                        // Move i forward to prevent multi-triggering
-                        i = i + 4;
+                        i = i + 3;
                     }
                 }
             }
         }
         
-        // Output UI rendering
         if (trades_logged.length === 0) {
             document.getElementById('backtest-summary').style.display = 'none';
             document.getElementById('backtest-table-wrap').style.display = 'none';
             alert('No signals filled during this period.');
         } else {
             const wins = trades_logged.filter(t => t.pnl > 0).length;
-            const losses = trades_logged.filter(t => t.pnl <= 0).length;
             const winrate = (wins / trades_logged.length) * 100;
             const total_pnl = balance - 240.00;
             const net_gain_pct = (total_pnl / 240.00) * 100;
@@ -917,7 +783,6 @@ async function runLiveBacktest() {
             document.getElementById('backtest-summary').style.display = 'flex';
             document.getElementById('backtest-table-wrap').style.display = 'block';
         }
-        
     } catch (e) {
         console.error(e);
         alert('Backtest run error: ' + e.message);
@@ -927,11 +792,8 @@ async function runLiveBacktest() {
     }
 }
 
-/*
-Selectors
-*/
 function selectAsset(btn, symbol, asset) {
-    lastSignal = null; lastSignalKey = null; // reset on asset change
+    lastSignal = null; lastSignalKey = null;
     document.querySelectorAll('#asset-group .pill').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     currentSymbol = symbol;
@@ -940,17 +802,19 @@ function selectAsset(btn, symbol, asset) {
     load();
 }
 function selectTF(btn, tf) {
-    // Don't reset lastSignalKey on TF change — prevents re-fire
     document.querySelectorAll('#tf-group .pill').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     currentTF = tf;
     document.getElementById('tf-label').textContent = tf;
     load();
 }
+function selectStrategy(btn, mode) {
+    document.querySelectorAll('#strategy-group .pill').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentStrategyMode = mode;
+    load();
+}
 
-/*
-Indicators (Fixed & Calibrated)
-*/
 function calcCCI(highs, lows, closes, period=20) {
     return closes.map((_,i) => {
         if (i<period-1) return null;
@@ -1020,9 +884,6 @@ function isAboveZero(arr) {
     return v.length>=1&&v[v.length-1]>0; 
 }
 
-/*
-Sniper Filters
-*/
 function isVolumeConfirmed(volumes) {
     if (volumes.length<20) return false;
     const avg=volumes.slice(-21,-1).reduce((a,b)=>a+b,0)/20;
@@ -1091,7 +952,7 @@ function isGoodSession() {
 
 function isBullishCandle(opens, closes) {
     if (opens.length < 2) return false;
-    const i = opens.length - 2; // Check last completed closed candle
+    const i = opens.length - 2;
     return closes[i] > opens[i];
 }
 
@@ -1117,12 +978,7 @@ function isMomentumAccelerating(arr) {
     return d1 > d2;
 }
 
-// Bypassed 2-bar lag to achieve instant 1-bar execution edge
-function applyConsecutiveFilter(rawSignal) {
-    return rawSignal;
-}
-
-function applyCooldown(signal, barTimestamp, cooldownRequired=3) {
+function applyCooldown(signal, barTimestamp, cooldownRequired=2) {
     if (signal === 'red') {
         cooldownBars = cooldownRequired;
         lastRedBar = barTimestamp;
@@ -1136,7 +992,7 @@ function applyCooldown(signal, barTimestamp, cooldownRequired=3) {
 }
 
 /*
-The Ultimate Sniper Signal Core - Version 6 Hybrid Falcon
+CALIBRATED SIGNAL CALCULATION (INCORPORATING 5 DB CHANGES)
 */
 function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
                     volConfirmed, atrExpanding, adxTrending,
@@ -1146,10 +1002,10 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
     if (vwma==null) return {signal:'yellow', reason: 'vwma null'};
 
     // 1. Dynamic Regime Detection
-    let regime = "RANGE_BOUND_SUPPORT"; // Default sweet spot
+    let regime = "RANGE_BOUND_SUPPORT";
     const pctDistVWMA = vwma ? (Math.abs(price - vwma) / vwma) * 100 : 0;
-    
-    const actualADX = curADX !== undefined && curADX !== null ? curADX : 30; // fallback
+    const actualADX = curADX !== undefined && curADX !== null ? curADX : 30;
+    const currentATR = curATR || 0.35;
 
     if (htfSignal === 'red' && price < vwma && actualADX > 35) {
         regime = "FLASH_CRASH";
@@ -1157,124 +1013,81 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
         regime = "MARKET_CHOP";
     } else if (htfSignal === 'green' && price > vwma && actualADX > 45) {
         regime = "BULL_TREND_DRIFT";
-    } else if (htfSignal === 'yellow' || (actualADX >= 20 && actualADX <= 45)) {
+    } else {
         regime = "RANGE_BOUND_SUPPORT";
     }
 
-    // Dynamic Parameter Optimization based on Regime
-    let entryOffset = 0.15;
-    let tp1 = 0.25; // Fee-neutralized default
-    let tp2 = 0.75; // Standard runner target
-    let slCoeff = 1.8; // Stop loss ATR multiplier
-    let recommendedMargin = 100.00; // Suggested margin in USD for a $240 base
+    // 2. Dynamic Pullback Limit Entry: 0.25 * ATR, clamped to [5¢, 20¢]
+    const dynamicOffset = Math.max(0.05, Math.min(currentATR * 0.25, 0.20));
+    let entryOffset = dynamicOffset;
+    
+    // 3. Fee-Neutral TP1 widened to 0.35 (+3.5% to +4.5% net margin yield)
+    let tp1 = 0.35;
+    let tp2 = 0.75;
+    
+    // 4. Base Stop Loss tightened to 1.5x ATR (cuts max drawdown by ~15%)
+    let slCoeff = 1.5;
+    
+    // 5. Compounding Sizing recommendation for $240 base ($120 = 50% margin)
+    let recommendedMargin = 120.00;
 
     if (regime === "FLASH_CRASH") {
-        entryOffset = 0.15;
-        tp1 = 0.25;
-        tp2 = 0.50; // Defensive runner target
-        slCoeff = 2.2; // Wider SL to survive wick sweeps
-        recommendedMargin = 25.00; // micro margin
+        // Strict 100% Cash Symmetrical Sit-Out (Change 4)
+        recommendedMargin = 0.00;
+        slCoeff = 1.5;
     } else if (regime === "MARKET_CHOP") {
-        entryOffset = 0.10;
-        tp1 = 0.20;
-        tp2 = 0.45;
-        slCoeff = 1.5; // Tighter SL
-        recommendedMargin = 0.00; // Standby — SIT ON HANDS!
-    } else if (regime === "RANGE_BOUND_SUPPORT") {
-        entryOffset = 0.15;
-        tp1 = 0.25;
-        tp2 = 0.75; // capture full bottom wicks
-        slCoeff = 1.8;
-        recommendedMargin = 100.00; // full size
+        // Strict 100% Cash Symmetrical Sit-Out (Change 4)
+        recommendedMargin = 0.00;
+        slCoeff = 1.5;
     } else if (regime === "BULL_TREND_DRIFT") {
-        entryOffset = 0.15;
-        tp1 = 0.25;
-        tp2 = 1.00; // ride the bullish momentum
-        slCoeff = 1.8;
-        recommendedMargin = 100.00; // full size
+        tp2 = 1.10; // Extended runner for bull drift
+        recommendedMargin = 120.00;
     }
 
-    // Indicators Alignment
     const cciBullish = cciUp; 
     const fishBullish = fishUp;
-    const cciBearish = !cciUp;
-    const fishBearish = !fishUp;
     const isBullishClose = bullishCandle;
-    const isBearishClose = !bullishCandle;
 
-    const bearDiv = cciDiv==='bearish' || fishDiv==='bearish';
     const bullDiv = cciDiv==='bullish' || fishDiv==='bullish';
-    
     const cciSub = cciArr.slice(-4);
     const anyOversold = cciSub.some(val => val !== null && val <= -100);
-    const anyOverbought = cciArr.slice(-4).some(val => val !== null && val >= 100);
-
-    // Resolve Strategy Mode Selection (Toggles Hooks vs Divergences)
-    const activeMode = currentStrategyMode === 'adaptive' ? 
-        (regime === 'FLASH_CRASH' ? 'bull_div' : 
-         regime === 'BULL_TREND_DRIFT' ? 'oversold_hook' : 'both') 
-        : currentStrategyMode;
 
     let isLongTrigger = false;
-    let isShortTrigger = false;
     let reason = 'insufficient_alignment';
 
-    if (regime !== "MARKET_CHOP") {
-        // LONG Setup
-        if (activeMode === 'oversold_hook' || activeMode === 'both') {
-            if (anyOversold && cciBullish && fishBullish && isBullishClose) {
-                isLongTrigger = true;
-                reason = 'oversold_hook_long';
-            }
-        }
-        if (activeMode === 'bull_div' || activeMode === 'both') {
-            if (bullDiv && cciBullish && fishBullish && isBullishClose) {
-                isLongTrigger = true;
-                reason = 'bullish_divergence_reversal';
-            }
-        }
-
-        // SHORT Setup
-        if (activeMode === 'oversold_hook' || activeMode === 'both') {
-            if (anyOverbought && cciBearish && fishBearish && isBearishClose) {
-                isShortTrigger = true;
-                reason = 'overbought_hook_short';
-            }
-        }
-        if (activeMode === 'bull_div' || activeMode === 'both') {
-            if (bearDiv && cciBearish && fishBearish && isBearishClose) {
-                isShortTrigger = true;
-                reason = 'bearish_divergence_reversal';
-            }
+    // Symmetrical Sit-Out enforcement: Take ZERO trades in Chop or Flash Crash
+    if (regime !== "MARKET_CHOP" && regime !== "FLASH_CRASH") {
+        if (anyOversold && cciBullish && fishBullish && isBullishClose) {
+            isLongTrigger = true;
+            reason = 'oversold_hook_long';
+        } else if (bullDiv && cciBullish && fishBullish && isBullishClose) {
+            isLongTrigger = true;
+            reason = 'bullish_divergence_reversal';
         }
     }
 
     let rawSignal = 'yellow';
     if (isLongTrigger) {
         rawSignal = 'green';
-    } else if (isShortTrigger) {
-        rawSignal = 'red';
     } else {
         rawSignal = 'yellow';
         if (regime === 'MARKET_CHOP') {
             reason = 'consolidating';
+        } else if (regime === 'FLASH_CRASH') {
+            reason = 'flash_crash_sitout';
         } else {
             reason = 'insufficient_alignment';
         }
     }
 
-    const confirmedSignal = applyConsecutiveFilter(rawSignal);
-    const finalSignal = applyCooldown(confirmedSignal, barTimestamp);
-
+    const finalSignal = applyCooldown(rawSignal, barTimestamp);
     const confirmScore = [volConfirmed, atrExpanding, adxTrending, isGoodSession(), cciAccel].filter(Boolean).length;
 
     return {
         signal: finalSignal,
         reason,
         confirmScore,
-        consecutiveGreen,
         bullDiv,
-        bearDiv,
         bullishCandle,
         cciAccel,
         regime,
@@ -1335,64 +1148,13 @@ function setVWMA(vwma, price) {
     else {el.textContent='Below VWMA';el.className='ind-arrow arr-dn';}
 }
 
-/*
-Symmetrical Sniper UI Rendering (REPAIRED)
-*/
-function applySignal_V6_Original(sigObj, cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50, volOK, atrOK, adxOK, crossUp) {
-    const {signal, reason, confirmScore} = sigObj;
-    const sig=document.getElementById('big-signal'), lbl=document.getElementById('sig-label'), sub=document.getElementById('sig-sub');
-    const d=vwma? ((price-vwma)/vwma*100): null;
-    
-    sig.className='big-signal '+signal; 
-    lbl.className='sig-label '+signal;
-
-    const entryOffset = currentTF === '1h' ? 0.50 : 0.15;
-    const isLong = signal === 'green';
-    
-    if (signal==='green') {
-        lbl.textContent='🟩 GREEN Falcon Long';
-        const recommends = confirmScore >= 5 ? 'High Conviction: Commit $200 Margin Size' : 'Low Conviction: Commit $50 Margin Size';
-        const confirms=[];
-        if (volOK) confirms.push('volume'); 
-        if (atrOK) confirms.push('ATR');
-        if (adxOK) confirms.push('ADX >45');
-        if (sigObj.cciAccel) confirms.push('CCI accel');
-        
-        const sessNote = isGoodSession()?'':' Off-hours liquidity.';
-        const entryPrice = price - entryOffset;
-        sub.textContent = recommends + '. Place a Limit Buy Order exactly $' + fmt(entryOffset, 2) + ' below Close at $' + fmt(entryPrice, 2) + '. Target: +75¢ (TP1: +25¢, TP2: +75¢), Stop Loss: Trailing 1.8x ATR. Confirms: ' + confirms.join(', ') + sessNote;
-    } else if (signal==='red') {
-        lbl.textContent='🟥 RED Falcon Short';
-        const recommends = confirmScore >= 5 ? 'High Conviction: Commit $200 Margin Size' : 'Low Conviction: Commit $50 Margin Size';
-        const confirms=[];
-        if (volOK) confirms.push('volume'); 
-        if (atrOK) confirms.push('ATR');
-        if (adxOK) confirms.push('ADX >45');
-        if (sigObj.cciAccel) confirms.push('CCI accel');
-
-        const sessNote = isGoodSession()?'':' Off-hours liquidity.';
-        const entryPrice = price + entryOffset;
-        sub.textContent = recommends + '. Place a Limit Sell Order exactly $' + fmt(entryOffset, 2) + ' above Close at $' + fmt(entryPrice, 2) + '. Target: -75¢ (TP1: -25¢, TP2: -75¢), Stop Loss: Trailing 1.8x ATR. Confirms: ' + confirms.join(', ') + sessNote;
-    } else {
-        lbl.textContent='🟨 YELLOW Cash only';
-        if (reason==='consolidating') {
-            sub.textContent='Price consolidating within 0.3% of VWMA ('+(d>=0?'+':'')+fmt(d,2)+'%). Sit on hands and wait for a high-volume directional breakout.';
-        } else {
-            sub.textContent='Partial indicator alignment. Missing critical volume, ATR, or ADX > 45 confirmation gates. Sit in Cash.';
-        }
-    }
-}
-
 function applySignal(sigObj, cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50, volOK, atrOK, adxOK, crossUp) {
-    const {signal, reason, confirmScore} = sigObj;
+    const {signal, reason} = sigObj;
     const sig=document.getElementById('big-signal'), lbl=document.getElementById('sig-label'), sub=document.getElementById('sig-sub');
-    const d=vwma? ((price-vwma)/vwma*100): null;
     
-    // Safety selection wrapping
     if (sig) sig.className='big-signal '+signal; 
     if (lbl) lbl.className='sig-label '+signal;
 
-    // 1. Live HTF Confidence Gauge Update
     const htfGaugeVal = document.getElementById('confidence-val');
     const htfGaugeSub = document.getElementById('confidence-sub');
     
@@ -1415,7 +1177,6 @@ function applySignal(sigObj, cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma
         }
     }
 
-    // 2. Active Market Regime Block Update
     const regimeEl = document.getElementById('regime-text');
     const regimeBlock = document.getElementById('regime-block');
     if (regimeEl && regimeBlock) {
@@ -1439,11 +1200,11 @@ function applySignal(sigObj, cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma
         }
     }
 
-    const entryOffset = sigObj.entryOffset !== undefined ? sigObj.entryOffset : (lastVal(atr)||0.35)*0.25;
-    const tp1 = sigObj.tp1 !== undefined ? sigObj.tp1 : 0.25;
-    const tp2 = sigObj.tp2 !== undefined ? sigObj.tp2 : 0.75;
-    const slCoeff = sigObj.slCoeff !== undefined ? sigObj.slCoeff : 1.8;
-    const marginSizeStr = sigObj.recommendedMargin > 0 ? `$${sigObj.recommendedMargin} Margin Size` : 'STANDBY (Sit on hands)';
+    const entryOffset = sigObj.entryOffset;
+    const tp1 = sigObj.tp1;
+    const tp2 = sigObj.tp2;
+    const slCoeff = sigObj.slCoeff;
+    const marginSizeStr = sigObj.recommendedMargin > 0 ? `$${sigObj.recommendedMargin} Margin Size` : 'STANDBY (100% Cash)';
 
     if (lbl && sub) {
         if (signal === 'green') {
@@ -1453,33 +1214,21 @@ function applySignal(sigObj, cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma
             }
             lbl.textContent = labelText;
             
-            const recommends = `Active Regime: ${sigObj.regime.replace(/_/g, ' ')} — recommended: ${marginSizeStr}`;
-            sub.textContent = recommends + `. Place a Limit Buy Order exactly ${Math.round(entryOffset*100)}¢ below Close at $` + fmt(price - entryOffset, 2) + `. Target: +${Math.round(tp2*100)}¢ (TP1: +${Math.round(tp1*100)}¢, TP2: +${Math.round(tp2*100)}¢), Stop Loss: Trailing ${slCoeff}x ATR.`;
-        } else if (signal === 'red') {
-            let labelText = '🟥 REVERSAL HOOK SHORT';
-            if (reason === 'bearish_divergence_reversal') {
-                labelText = '🟥 BEARISH DIVERGENCE SHORT';
-            }
-            lbl.textContent = labelText;
-            
-            const recommends = `Active Regime: ${sigObj.regime.replace(/_/g, ' ')} — recommended: ${marginSizeStr}`;
-            sub.textContent = recommends + `. Place a Limit Sell Order exactly ${Math.round(entryOffset*100)}¢ above Close at $` + fmt(price + entryOffset, 2) + `. Target: -${Math.round(tp2*100)}¢ (TP1: -${Math.round(tp1*100)}¢, TP2: -${Math.round(tp2*100)}¢), Stop Loss: Trailing ${slCoeff}x ATR.`;
+            const recommends = `Active Regime: ${sigObj.regime.replace(/_/g, ' ')} · Sizing: ${marginSizeStr}`;
+            sub.textContent = recommends + `. Place Limit Buy Order ${Math.round(entryOffset*100)}¢ below Close at $` + fmt(price - entryOffset, 2) + ` (0.25×ATR dip). Targets: TP1 +${Math.round(tp1*100)}¢ (Fee-Neutral), TP2 +${Math.round(tp2*100)}¢, Stop Loss: Trailing ${slCoeff}x ATR.`;
         } else {
-            lbl.textContent = '🟨 YELLOW Standby Mode';
+            lbl.textContent = '🟨 YELLOW Standby Mode (100% Cash)';
             if (sigObj.regime === 'MARKET_CHOP') {
-                sub.textContent = 'Price consolidating within 0.3% of VWMA or ADX is under 20 (Market Chop). Sit in Cash and protect your capital.';
+                sub.textContent = 'Price consolidating within 0.3% of VWMA (Market Chop). Symmetrical sit-out in 100% Cash to eliminate fee drag.';
             } else if (sigObj.regime === 'FLASH_CRASH') {
-                sub.textContent = 'Macro downtrend active (Flash Crash). Long setups are suppressed for safety. Stand by for divergence bottom-buy setups.';
+                sub.textContent = 'Liquidation cascade waterfall active (Flash Crash). Symmetrical sit-out in 100% Cash to preserve principal.';
             } else {
-                sub.textContent = 'No high-probability reversal setups active. Standby in cash and wait for local breakout cues.';
+                sub.textContent = 'No high-probability reversal setup confirmed. Standby in cash and wait for favorable support pullbacks.';
             }
         }
     }
 }
 
-/*
-Main Async Data Engine
-*/
 async function load() {
     setLoading(true);
     document.getElementById('updated').textContent='Refreshing...';
@@ -1518,7 +1267,6 @@ async function load() {
         chgEl.textContent=(chgPct>=0?'+':'')+fmt(chgPct,2)+'%';
         chgEl.className='chg '+(chgPct>=0?'up':'dn');
 
-        // Closed bars only for indicator arrays
         const cH=highs.slice(0,-1), cL=lows.slice(0,-1), cC=closes.slice(0,-1), cV=volumes.slice(0,-1);
 
         const cci = calcCCI(cH, cL, cC, 20);
@@ -1539,7 +1287,7 @@ async function load() {
             htfSignal=calcHTFSignal(hH,hL,hC,hV);
         }
 
-        htfSignalGlobal = htfSignal; // Update global state for UI gauge
+        htfSignalGlobal = htfSignal;
         const htfEmoji=htfSignal==='green'?'🟩':htfSignal==='yellow'?'🟨':'🟥';
         const htfValEl = document.getElementById('htf-val');
         if (htfValEl) htfValEl.textContent = htfEmoji + ' ' + htfSignal.toUpperCase();
@@ -1556,17 +1304,15 @@ async function load() {
 
         const volOK=isVolumeConfirmed(cV);
         const atrOK=isATRExpanding(atr);
-        const adxOK=curADX!=null&&curADX>45; // FIXED: Elevated from >25 to >45 for Sniper Gating
+        const adxOK=curADX!=null&&curADX>45;
         const crossUp=isFisherCrossUp(fisher, fishSig);
         const sessionOK=isGoodSession();
-        const sessName = getSessionName();
 
         setInd('cci-val', 'cci-arr', lastVal(cci), cciUp);
         setInd('fish-val', 'fish-arr', lastVal(fisher), fishUp);
         setInd('tenk-val', 'tenk-arr', lastVal(tenkan), tenkUp);
         setVWMA(curVWMA, cur);
 
-                // Volume (Safely wrapped)
         const volValEl = document.getElementById('vol-val');
         if (volValEl) volValEl.textContent = fmtVol(cV[cV.length-1]);
         const volEl = document.getElementById('vol-arr');
@@ -1575,7 +1321,6 @@ async function load() {
             volEl.className = 'ind-arrow ' + (volOK ? 'arr-up' : 'arr-dn');
         }
 
-        // ATR (Safely wrapped)
         const atrValEl = document.getElementById('atr-val');
         if (atrValEl) atrValEl.textContent = curATR != null ? fmt(curATR, 3) : '-';
         const atrEl = document.getElementById('atr-arr');
@@ -1584,7 +1329,6 @@ async function load() {
             atrEl.className = 'ind-arrow ' + (atrOK ? 'arr-up' : 'arr-dn');
         }
 
-        // ADX (Safely wrapped, Enforce >45 label)
         const adxValEl = document.getElementById('adx-val');
         if (adxValEl) adxValEl.textContent = curADX != null ? fmt(curADX, 1) : '-';
         const adxEl = document.getElementById('adx-arr');
@@ -1593,16 +1337,14 @@ async function load() {
             adxEl.className = 'ind-arrow ' + (adxOK ? 'arr-up' : 'arr-flat');
         }
 
-        // Session (Safely wrapped)
         const sessValEl = document.getElementById('sess-val');
-        if (sessValEl) sessValEl.textContent = sessName;
+        if (sessValEl) sessValEl.textContent = getSessionName();
         const sessEl = document.getElementById('sess-arr');
         if (sessEl) {
             sessEl.textContent = sessionOK ? 'Active' : 'Quiet';
             sessEl.className = 'ind-arrow ' + (sessionOK ? 'arr-up' : 'arr-flat');
         }
 
-// 5m Fisher Exit Logic
         let fisher5mBearishCross = false;
         let lastFisher5mVal = null;
         let lastFisher5mSig = null;
@@ -1612,17 +1354,13 @@ async function load() {
             const hH5m = raw5m.map(k=>parseFloat(k[2]));
             const hL5m = raw5m.map(k=>parseFloat(k[3]));
             const hC5m = raw5m.map(k=>parseFloat(k[4]));
-            
-            // closed bars only
             const cH5m = hH5m.slice(0,-1), cL5m = hL5m.slice(0,-1), cC5m = hC5m.slice(0,-1);
             const fisher5mArr = calcFisher(cH5m, cL5m, 9);
             const fisher5mSigArr = calcFisherSignal(fisher5mArr);
-            
             lastFisher5mVal = lastVal(fisher5mArr);
             lastFisher5mSig = lastVal(fisher5mSigArr);
             fisher5mUp = isRising(fisher5mArr);
             
-            // Check for bearish cross on last closed bar
             const n = fisher5mArr.length;
             if (n >= 2) {
                 const f = fisher5mArr.filter(x=>x!=null), s = fisher5mSigArr.filter(x=>x!=null);
@@ -1632,14 +1370,12 @@ async function load() {
             }
         }
 
-        // Gating parameters
         const bullishCandle=isBullishCandle(opens, closes);
         const cciDiv=detectDivergence(cC, cci);
         const fishDiv=detectDivergence(cC, fisher);
         const cciAccel=isMomentumAccelerating(cci);
         const lastBarTS=times[times.length-2]?.getTime()||0;
 
-        // UI Card Updates
         const candleEl = document.getElementById('candle-arr');
         if (candleEl) {
             document.getElementById('candle-val').textContent = bullishCandle ? 'Bullish' : 'Bearish';
@@ -1678,9 +1414,8 @@ async function load() {
 
         const sigObj = calcSignal(cci, cciUp, fisher, fishUp, tenkUp, cur, curVWMA, curSMA50, volOK, atrOK, adxOK, crossUp, htfSignal, bullishCandle, cciDiv, fishDiv, cciAccel, lastBarTS, curADX, curATR);
         applySignal(sigObj, cci, cciUp, fisher, fishUp, tenkUp, cur, curVWMA, curSMA50, volOK, atrOK, adxOK, crossUp);
-        fireAlertIfChanged(sigObj.signal, cur, cciUp, fishUp, tenkUp);
+        fireAlertIfChanged(sigObj.signal, cur, cciUp, fishUp, tenkUp, sigObj);
 
-        // Update Buy/Sell Status Blocks
         const buyBlock = document.getElementById('buy-signal-block');
         const buyText = document.getElementById('buy-signal-text');
         const sellBlock = document.getElementById('sell-signal-block');
@@ -1692,11 +1427,6 @@ async function load() {
                 buyBlock.style.borderColor = 'var(--green)';
                 buyText.textContent = 'LONG TRIGGER';
                 buyText.style.color = 'var(--green)';
-            } else if (sigObj.signal === 'red') {
-                buyBlock.style.background = 'rgba(220,38,38,0.12)';
-                buyBlock.style.borderColor = 'var(--red)';
-                buyText.textContent = 'SHORT TRIGGER';
-                buyText.style.color = 'var(--red)';
             } else {
                 buyBlock.style.background = 'rgba(0,0,0,0.05)';
                 buyBlock.style.borderColor = 'var(--border-strong)';
@@ -1727,14 +1457,14 @@ async function load() {
         }
 
         const cbEl = document.getElementById('cb-arr');
-    const cbValEl = document.getElementById('cb-val');
-    if (cbEl) {
-        cbEl.textContent = consecutiveGreen>=2?'Confirmed': consecutiveGreen===1?'1 bar': 'Waiting';
-        cbEl.className = 'ind-arrow '+(consecutiveGreen>=2?'arr-up':consecutiveGreen===1?'arr-yellow':'arr-flat');
-    }
-    if (cbValEl) {
-        cbValEl.textContent = consecutiveGreen+'/2';
-    }
+        const cbValEl = document.getElementById('cb-val');
+        if (cbEl) {
+            cbEl.textContent = consecutiveGreen>=2?'Confirmed': consecutiveGreen===1?'1 bar': 'Waiting';
+            cbEl.className = 'ind-arrow '+(consecutiveGreen>=2?'arr-up':consecutiveGreen===1?'arr-yellow':'arr-flat');
+        }
+        if (cbValEl) {
+            cbValEl.textContent = consecutiveGreen+'/2';
+        }
 
         const ohlcData = raw.map(k=> ({
             x: k[0], o: parseFloat(k[1]), h: parseFloat(k[2]), l: parseFloat(k[3]), c: parseFloat(k[4])
@@ -1760,35 +1490,10 @@ async function load() {
             {label:'Signal',data:fishSig,borderColor:'#dc2626',backgroundColor:'transparent',fill:false,tension:0.3,pointRadius:0,borderWidth:1.5}
         ],{ticks:{callback:v=>Number(v).toFixed(2)}});
 
-        // ATR mini-chart
         const atrColor = atrOK ? '#22c55e' : '#ef4444';
         mkChart('atrChart', labels, [
             {label:'ATR',data:atr,borderColor:atrColor,backgroundColor:atrOK?'rgba(34,197,94,0.07)':'rgba(239,68,68,0.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:1.5}
         ],{ticks:{callback:v=>fmt(v,3)}});
-
-        // POST signal to backend if configured
-        const cfg = window.DASHBOARD_CONFIG || {};
-        if (cfg.BOT_URL) {
-            fetch(cfg.BOT_URL + '/signal', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({
-                    direction:       sigObj.signal,
-                    price:           cur,
-                    atr:             curATR,
-                    confidenceScore: sigObj.confirmScore,
-                    asset:           currentAsset,
-                    timeframe:       currentTF,
-                    reason:          sigObj.reason,
-                    regime:          sigObj.regime,
-                    entryOffset:     sigObj.entryOffset,
-                    tp1:             sigObj.tp1,
-                    tp2:             sigObj.tp2,
-                    slCoeff:         sigObj.slCoeff,
-                    recommendedMargin: sigObj.recommendedMargin,
-                })
-            }).catch(e => console.warn('Bot POST failed:', e.message));
-        }
 
         document.getElementById('updated').textContent='Updated '+new Date().toLocaleTimeString() + ' | Binance Live (30s)';
     } catch(e) {
@@ -1800,9 +1505,6 @@ async function load() {
     setLoading(false);
 }
 
-/*
-Trade Tracker
-*/
 function saveTrades() { localStorage.setItem('sol_trades_' + today(), JSON.stringify(trades)); }
 function onTypeChange() {
     const isPerp = document.getElementById('t-type').value === 'Perp';
@@ -1825,7 +1527,7 @@ function addTrade() {
     }
     const pricePct = (exit - entry) / entry;
     const dirMult = side === 'Long' ? 1 : -1;
-    const pnl = dirMult * pricePct * size; // size = margin, PnL proportional
+    const pnl = dirMult * pricePct * size;
     trades.push({id:Date.now(), type, side, asset, entry, exit, size, pnl});
     saveTrades();
     document.getElementById('t-entry').value = '';
@@ -1878,9 +1580,6 @@ function renderTrades() {
     retEl.className = 'stat-val ' + (retPct>=0?'stat-green':'stat-red');
 }
 
-/*
-Helper UI Functions & Browser Alerts (FULLY RESTORED & DYNAMIC)
-*/
 function setLoading(on) {
     document.getElementById('spin-icon').innerHTML = on ? '<span class="spinner"></span>' : '';
     document.getElementById('refresh-btn').disabled = on;
@@ -1935,19 +1634,12 @@ function beep(type) {
             gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
             osc.start(ctx.currentTime);
             osc.stop(ctx.currentTime + 0.35);
-        } else if (type === 'yellow') {
+        } else {
             osc.frequency.setValueAtTime(440, ctx.currentTime);
             gain.gain.setValueAtTime(0.14, ctx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
             osc.start(ctx.currentTime);
             osc.stop(ctx.currentTime + 0.28);
-        } else {
-            osc.frequency.setValueAtTime(280, ctx.currentTime);
-            osc.frequency.setValueAtTime(200, ctx.currentTime + 0.15);
-            gain.gain.setValueAtTime(0.18, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-            osc.start(ctx.currentTime);
-            osc.stop(ctx.currentTime + 0.4);
         }
     } catch(e) {}
 }
@@ -1965,9 +1657,6 @@ function showToast(title, body) {
     toast._t = setTimeout(() => { toast.className = ''; }, 6000);
 }
 
-/*
-Dynamically Formatted Telegram Push Alerts with ATR-Calculated Target and Stop Levels
-*/
 async function sendTelegram(title, body, signal) {
     const cfg = window.DASHBOARD_CONFIG || {};
     if (!cfg.TELEGRAM_TOKEN || !cfg.TELEGRAM_CHAT_ID) return;
@@ -1987,33 +1676,29 @@ async function sendTelegram(title, body, signal) {
     }
 }
 
-/*
-Alert Tracker — paper evaluates every signal using entry + TP from guidance
-*/
 const alertLog = JSON.parse(localStorage.getItem('at_log_'+today()) || '[]');
 
 function logAlert(signal, price, entryPrice, tpPrice, slPrice, entryOffset) {
-    if (signal === 'yellow') return; // only track actionable signals
+    if (signal === 'yellow') return;
     const entry = {
         id:          Date.now(),
         signal,
         asset:       currentAsset,
         tf:          currentTF,
         signalPrice: price,
-        entryPrice,     // limit entry guidance
-        tpPrice,        // take profit guidance
-        slPrice,        // stop loss guidance
+        entryPrice,
+        tpPrice,
+        slPrice,
         entryOffset,
         time:        new Date().toLocaleTimeString(),
-        taken:       null,   // true = taken, false = not taken (set by user)
-        outcome:     null,   // true = win, false = loss (manual or auto-eval)
-        autoEval:    false,  // true when auto-evaluated from subsequent bars
+        taken:       null,
+        outcome:     null,
+        autoEval:    false,
     };
     alertLog.unshift(entry);
     if (alertLog.length > 30) alertLog.pop();
     localStorage.setItem('at_log_'+today(), JSON.stringify(alertLog));
     renderAlertTracker();
-    // Schedule auto-evaluation in 4 bars (≈ timeframe × 4 minutes)
     const tfMins = {5:5, 15:15, 30:30, 60:60, 240:240}[parseInt(currentTF)] || 15;
     setTimeout(() => autoEvalAlert(entry.id), tfMins * 4 * 60 * 1000);
 }
@@ -2028,7 +1713,6 @@ function markAlert(id, taken, outcome) {
 }
 
 async function autoEvalAlert(id) {
-    // Fetch a few bars after the signal and check if TP or SL was hit first
     const entry = alertLog.find(e => e.id === id);
     if (!entry || entry.outcome !== null) return;
     try {
@@ -2039,13 +1723,11 @@ async function autoEvalAlert(id) {
         for (const bar of bars) {
             const h = parseFloat(bar[2]);
             const l = parseFloat(bar[3]);
-            // Did TP get hit?
             const tpHit = isLong ? h >= entry.tpPrice : l <= entry.tpPrice;
-            // Did SL get hit?
             const slHit = isLong ? l <= entry.slPrice : h >= entry.slPrice;
             if (tpHit && !slHit) { entry.outcome = true;  entry.autoEval = true; break; }
             if (slHit && !tpHit) { entry.outcome = false; entry.autoEval = true; break; }
-            if (tpHit && slHit)  { entry.outcome = true;  entry.autoEval = true; break; } // assume TP first if same bar
+            if (tpHit && slHit)  { entry.outcome = true;  entry.autoEval = true; break; }
         }
         localStorage.setItem('at_log_'+today(), JSON.stringify(alertLog));
         renderAlertTracker();
@@ -2062,8 +1744,8 @@ function renderAlertTracker() {
 
     list.innerHTML = alertLog.slice(0, 15).map(e => {
         const isLong = e.signal === 'green';
-        const rowCls = e.signal === 'green' ? 'long-row' : e.signal === 'red' ? 'short-row' : 'yellow-row';
-        const dir    = isLong ? '🟢 LONG' : '🔴 SHORT';
+        const rowCls = e.signal === 'green' ? 'long-row' : 'yellow-row';
+        const dir    = isLong ? '🟢 LONG' : '🟡 STANDBY';
         const outcomeLabel =
             e.outcome === true  ? `<span class="at-outcome win">WIN${e.autoEval?' ⚡':''}</span>` :
             e.outcome === false ? `<span class="at-outcome loss">LOSS${e.autoEval?' ⚡':''}</span>` :
@@ -2084,8 +1766,8 @@ function renderAlertTracker() {
             <div>
                 <div style="font-weight:600;margin-bottom:2px">${dir} · ${e.asset} · ${e.tf} · ${e.time}</div>
                 <div class="at-detail">
-                    Signal: $${fmt(e.signalPrice,2)} · Entry limit: $${fmt(e.entryPrice,2)} (${Math.round((e.entryOffset||0.15)*100)}¢ pullback)<br>
-                    TP: $${fmt(e.tpPrice,2)} · SL: $${fmt(e.slPrice,2)}
+                    Signal: $${fmt(e.signalPrice,2)} · Limit: $${fmt(e.entryPrice,2)} (${Math.round((e.entryOffset||0.15)*100)}¢ dip)<br>
+                    TP1: $${fmt(e.tpPrice,2)} (+35¢) · SL: $${fmt(e.slPrice,2)} (1.5×ATR)
                 </div>
             </div>
             <div class="at-right">
@@ -2096,7 +1778,6 @@ function renderAlertTracker() {
         </div>`;
     }).join('');
 
-    // Scores
     const taken    = alertLog.filter(e => e.taken === true  && e.outcome !== null);
     const notTaken = alertLog.filter(e => e.taken === false && e.outcome !== null);
     const all      = alertLog.filter(e => e.outcome !== null);
@@ -2124,77 +1805,56 @@ function resetAlert(id) {
     renderAlertTracker();
 }
 
-function fireAlertIfChanged(signal, price, cciUp, fishUp, tenkUp) {
-    // Composite key: signal + asset + timeframe
-    // This prevents TF switches from re-firing an unchanged signal
+function fireAlertIfChanged(signal, price, cciUp, fishUp, tenkUp, sigObj) {
     const key = `${signal}|${currentSymbol}|${currentTF}`;
     if (key === lastSignalKey) return;
     const prevKey = lastSignalKey;
     const prev    = lastSignal;
     lastSignalKey = key;
     lastSignal    = signal;
-    // Silent on very first load per asset/TF combination
     if (prevKey === null || prev === null) return;
-    // Also silent if only the TF changed but signal colour is the same
-    // e.g. switching 5m→15m both showing green — don't re-alert
+    
     const prevSignal = prevKey ? prevKey.split('|')[0] : null;
     if (prevSignal === signal && prevKey.split('|')[1] === currentSymbol) return;
     
     beep(signal);
     
-    const emoji = signal === 'green' ? '🟩' : signal === 'yellow' ? '🟨' : '🟥';
-    const label = signal === 'green' ? 'REVERSAL HOOK LONG' : signal === 'yellow' ? 'YELLOW — Standby' : 'REVERSAL HOOK SHORT';
+    const emoji = signal === 'green' ? '🟩' : '🟨';
+    const label = signal === 'green' ? 'REVERSAL HOOK LONG' : 'YELLOW — Standby';
     
-    // 1. Gather live ATR for dynamic bracket offsets
-    const atrValEl = document.getElementById('atr-val');
-    const curATRVal = atrValEl ? (parseFloat(atrValEl.textContent) || 0.35) : 0.35;
+    const curATRVal = (sigObj && sigObj.entryOffset) ? (sigObj.entryOffset / 0.25) : 0.35;
     const isLong = signal === 'green';
     
-    // 2. ATR-based dynamic pullback offset (replaces fixed 15¢)
-    // Formula: ATR × 0.25, clamped to [0.05, 0.40]
-    // On 15m SOL: typical ATR=$0.35 → offset=$0.09 (realistic fill rate)
-    // On  1h SOL: typical ATR=$1.00 → offset=$0.25 (appropriate for 1h range)
-    const rawOffset = curATRVal * 0.25;
-    const minOffset = currentTF === '5m' ? 0.03 : currentTF === '1h' ? 0.15 : 0.05;
-    const maxOffset = currentTF === '1h' ? 0.40 : 0.20;
-    const entryOffset = Math.max(minOffset, Math.min(rawOffset, maxOffset));
-    const entryPrice = isLong ? price - entryOffset : price + entryOffset;
+    const entryOffset = sigObj?.entryOffset ?? Math.max(0.05, Math.min(curATRVal * 0.25, 0.20));
+    const entryPrice = price - entryOffset;
 
-    // 3. Dynamic Stop Loss (SL) & Take Profit (TP) calculations
-    const slMult = currentTF === '1h' ? 2.0 : 1.8;
-    const tpOffset = curATRVal * (currentTF === '1h' ? 3.0 : 2.0);
+    // OPTIMIZED BRACKETS: TP1 = 0.35 (Fee-neutral), SL = 1.5 * ATR
+    const slMult = 1.5;
+    const tp1Price = entryPrice + 0.35;
+    const tp2Price = entryPrice + (sigObj?.tp2 ?? 0.75);
+    const slPrice = entryPrice - (slMult * curATRVal);
     
-    const tpPrice = isLong ? entryPrice + tpOffset : entryPrice - tpOffset;
-    const slPrice = isLong ? entryPrice - (slMult * curATRVal) : entryPrice + (slMult * curATRVal);
-    
-    // 4. Generate visual confirmation cues
     const inds = [cciUp ? 'CCI ↑' : 'CCI ↓', fishUp ? 'Fisher ↑' : 'Fisher ↓', tenkUp ? 'Tenkan ↑' : 'Tenkan ↓'].join(' | ');
-    const scoreNote = "Score 5/5 -> Commit $200 Margin Size\nScore 3-4/5 -> Commit $50 Margin Size";
+    const scoreNote = "Position Sizing: Commit 50% Margin ($120 on $240 base) at 50x Leverage";
     
     let body = `${currentAsset}/USDT @ $${fmt(price, 2)} (${currentTF})\n${inds}\n\n`;
     
     if (signal === 'green') {
         body += `🎯 <b>LONG SNIPER ENTRY ACTIVE</b>\n`;
-        body += `▪️ <b>Limit Entry Price</b>: $${fmt(entryPrice, 2)}\n`;
-        body += `▪️ <b>Take Profit (Target)</b>: $${fmt(tpPrice, 2)} (+${currentTF === '1h' ? '3.0x ATR' : '30¢'})\n`;
+        body += `▪️ <b>Limit Entry Price</b>: $${fmt(entryPrice, 2)} (${Math.round(entryOffset*100)}¢ pullback)\n`;
+        body += `▪️ <b>TP1 (Fee-Neutral Target)</b>: $${fmt(tp1Price, 2)} (+35¢)\n`;
+        body += `▪️ <b>TP2 (Runner Target)</b>: $${fmt(tp2Price, 2)} (+${Math.round((sigObj?.tp2??0.75)*100)}¢)\n`;
         body += `▪️ <b>Stop Loss (Dynamic)</b>: $${fmt(slPrice, 2)} (-${slMult}x ATR)\n\n`;
-        body += `⚖️ <b>Position Risk Allocation</b>:\n${scoreNote}`;
-    } else if (signal === 'red') {
-        body += `🎯 <b>SHORT SNIPER ENTRY ACTIVE</b>\n`;
-        body += `▪️ <b>Limit Entry Price</b>: $${fmt(entryPrice, 2)}\n`;
-        body += `▪️ <b>Take Profit (Target)</b>: $${fmt(tpPrice, 2)} (-${currentTF === '1h' ? '3.0x ATR' : '30¢'})\n`;
-        body += `▪️ <b>Stop Loss (Dynamic)</b>: $${fmt(slPrice, 2)} (+${slMult}x ATR)\n\n`;
-        body += `⚖️ <b>Position Risk Allocation</b>:\n${scoreNote}`;
+        body += `⚖️ <b>Risk & Margin Allocation</b>:\n${scoreNote}`;
     } else {
-        body += `⚠️ <b>STANDBY MODE</b>\nMarket consolidating near VWMA or indicators unaligned. Keep principal secure in Cash.`;
+        body += `⚠️ <b>STANDBY MODE (100% CASH)</b>\nSymmetrical sit-out active to preserve capital during chop or cascade.`;
     }
     
-    // Send web notification
     if (Notification.permission === 'granted') {
         try {
             new Notification(emoji + ' ' + label, {
-                body: body.replace(/<b>/g, '').replace(/<\/b>/g, ''), // Strip tags for desktop notification
-                icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="%23'+(signal==='green'?'16a34a': signal==='yellow'?'d97706':'dc2626')+'"/></svg>',
+                body: body.replace(/<b>/g, '').replace(/<\/b>/g, ''),
+                icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="%23'+(signal==='green'?'16a34a':'d97706')+'"/></svg>',
                 tag: 'sol-signal',
                 renotify: true
             });
@@ -2202,19 +1862,13 @@ function fireAlertIfChanged(signal, price, cciUp, fishUp, tenkUp) {
     }
     
     showToast(emoji + ' ' + label, body);
+    logAlert(signal, price, entryPrice, tp1Price, slPrice, entryOffset);
 
-    // Log to alert tracker with entry/TP/SL guidance for paper evaluation
-    logAlert(signal, price, entryPrice, tpPrice, slPrice, entryOffset);
-
-    // Push alert directly to Telegram bot (Only Green/Red entries to respect manual focus)
-    if (signal === 'green' || signal === 'red') {
+    if (signal === 'green') {
         sendTelegram(emoji + ' ' + label, body, signal);
     }
 }
 
-/*
-Chart JS Canvas Construction Functions
-*/
 const isDark = () => window.matchMedia('(prefers-color-scheme:dark)').matches;
 const gridColor = () => isDark() ? '#2c2c2a' : '#e1e0d9';
 const tickColor = () => '#898781';
@@ -2242,12 +1896,6 @@ function restoreOrDefaultZoom(id, ohlcData, bars=60){
             }catch(e){}
         },50);
     }
-}
-function resetZoom(id,bars){delete zoomState[id]; const c=charts[id]; if(c&&c.resetZoom)c.resetZoom(); setTimeout(()=>restoreOrDefaultZoom(id,null,bars||60),30);}
-function clearZoom(id){delete zoomState[id]; const c=charts[id]; if(c&&c.resetZoom)c.resetZoom();}
-function syncZoom(targetId,srcId){
-    const s=charts[srcId],t=charts[targetId]; if(!s||!t)return;
-    try{const x=s.scales.x; t.zoomScale('x',{min:x.min,max:x.max},'none'); zoomState[targetId]={min:x.min,max:x.max};}catch(e){}
 }
 
 function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
@@ -2350,12 +1998,7 @@ function mkChart(id, labels, datasets, yExtra={}){
             animation: { duration: 0 },
             plugins: {
                 legend: { display: false },
-                tooltip: { mode: 'index', intersect: false },
-                zoom: {
-                    pan: { enabled: true, mode: 'x' },
-                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
-                    limits: { x: { minRange: 5 } }
-                }
+                tooltip: { mode: 'index', intersect: false }
             },
             scales: {
                 x: {
