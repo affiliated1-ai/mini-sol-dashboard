@@ -700,32 +700,32 @@ async function runLiveBacktest() {
                 regime = "RANGE_BOUND_SUPPORT";
             }
 
-            let entryOffset = getPullbackOffset(currentTF, curATR);
+    let entryOffset = getPullbackOffset(currentTF, cur_atr);
             let tp1 = 0.25;
             let tp2 = 0.75;
             let slCoeff = 1.8;
             let size_pct = 0.4167; // standard sizing
 
             if (regime === "FLASH_CRASH") {
-                entryOffset = getPullbackOffset(currentTF, curATR);
+            entryOffset = getPullbackOffset(currentTF, cur_atr);
                 tp1 = 0.25;
                 tp2 = 0.50;
                 slCoeff = 2.2;
                 size_pct = 0.104; // scale down to 10% sizing (~$25 margin size)
             } else if (regime === "MARKET_CHOP") {
-                entryOffset = getPullbackOffset(currentTF, curATR);
+            entryOffset = getPullbackOffset(currentTF, cur_atr);
                 tp1 = 0.20;
                 tp2 = 0.45;
                 slCoeff = 1.5;
                 size_pct = 0.00; // Standby - do not trade!
             } else if (regime === "RANGE_BOUND_SUPPORT") {
-                entryOffset = getPullbackOffset(currentTF, curATR);
+            entryOffset = getPullbackOffset(currentTF, cur_atr);
                 tp1 = 0.25;
                 tp2 = 0.75;
                 slCoeff = 1.8;
                 size_pct = 0.4167;
             } else if (regime === "BULL_TREND_DRIFT") {
-                entryOffset = getPullbackOffset(currentTF, curATR);
+            entryOffset = getPullbackOffset(currentTF, cur_atr);
                 tp1 = 0.25;
                 tp2 = 1.00; // extended target!
                 slCoeff = 1.8;
@@ -1171,32 +1171,32 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
     }
 
     // Dynamic Parameter Optimization based on Regime
-            let entryOffset = getPullbackOffset(currentTF, cur_atr);
+    let entryOffset = getPullbackOffset(currentTF, curATR);
     let tp1 = 0.25; // Fee-neutralized default
     let tp2 = 0.75; // Standard runner target
     let slCoeff = 1.8; // Stop loss ATR multiplier
     let recommendedMargin = 100.00; // Suggested margin in USD for a $240 base
 
     if (regime === "FLASH_CRASH") {
-                entryOffset = getPullbackOffset(currentTF, cur_atr);
+            entryOffset = getPullbackOffset(currentTF, curATR);
         tp1 = 0.25;
         tp2 = 0.50; // Defensive runner target
         slCoeff = 2.2; // Wider SL to survive wick sweeps
         recommendedMargin = 25.00; // micro margin
     } else if (regime === "MARKET_CHOP") {
-                entryOffset = getPullbackOffset(currentTF, cur_atr);
+            entryOffset = getPullbackOffset(currentTF, curATR);
         tp1 = 0.20;
         tp2 = 0.45;
         slCoeff = 1.5; // Tighter SL
         recommendedMargin = 0.00; // Standby — SIT ON HANDS!
     } else if (regime === "RANGE_BOUND_SUPPORT") {
-                entryOffset = getPullbackOffset(currentTF, cur_atr);
+            entryOffset = getPullbackOffset(currentTF, curATR);
         tp1 = 0.25;
         tp2 = 0.75; // capture full bottom wicks
         slCoeff = 1.8;
         recommendedMargin = 100.00; // full size
     } else if (regime === "BULL_TREND_DRIFT") {
-                entryOffset = getPullbackOffset(currentTF, cur_atr);
+            entryOffset = getPullbackOffset(currentTF, curATR);
         tp1 = 0.25;
         tp2 = 1.00; // ride the bullish momentum
         slCoeff = 1.8;
