@@ -1018,12 +1018,15 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
     }
 
     // 2. Dynamic Pullback Limit Entry: 0.25 * ATR, clamped to [5¢, 20¢]
-    const dynamicOffset = Math.max(0.05, Math.min(currentATR * 0.25, 0.20));
+    // In Range Bound: 0.30 * ATR clamped to [8¢, 22¢] for deeper support wick fill
+    const dynamicOffset = regime === "RANGE_BOUND_SUPPORT"
+        ? Math.max(0.08, Math.min(currentATR * 0.30, 0.22))
+        : Math.max(0.05, Math.min(currentATR * 0.25, 0.20));
     let entryOffset = dynamicOffset;
     
     // 3. Fee-Neutral TP1 widened to 0.35 (+3.5% to +4.5% net margin yield)
     let tp1 = 0.35;
-    let tp2 = 0.75;
+    let tp2 = regime === "RANGE_BOUND_SUPPORT" ? 0.55 : 0.75;
     
     // 4. Base Stop Loss tightened to 1.5x ATR (cuts max drawdown by ~15%)
     let slCoeff = 1.5;
@@ -1057,12 +1060,18 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
 
     // Symmetrical Sit-Out enforcement: Take ZERO trades in Chop or Flash Crash
     if (regime !== "MARKET_CHOP" && regime !== "FLASH_CRASH") {
-        if (anyOversold && cciBullish && fishBullish && isBullishClose) {
-            isLongTrigger = true;
-            reason = 'oversold_hook_long';
-        } else if (bullDiv && cciBullish && fishBullish && isBullishClose) {
-            isLongTrigger = true;
-            reason = 'bullish_divergence_reversal';
+        // Range Bound Filter: Prevent entering near channel resistance (must be <= VWMA or deep oversold CCI <= -110)
+        const isRangeBound = regime === "RANGE_BOUND_SUPPORT";
+        const passesRangeFilter = !isRangeBound || (price <= vwma || (cciArr[cciArr.length - 1] !== null && cciArr[cciArr.length - 1] <= -110));
+
+        if (passesRangeFilter) {
+            if (anyOversold && cciBullish && fishBullish && isBullishClose) {
+                isLongTrigger = true;
+                reason = 'oversold_hook_long';
+            } else if (bullDiv && cciBullish && fishBullish && isBullishClose) {
+                isLongTrigger = true;
+                reason = 'bullish_divergence_reversal';
+            }
         }
     }
 
@@ -1215,7 +1224,9 @@ function applySignal(sigObj, cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma
             lbl.textContent = labelText;
             
             const recommends = `Active Regime: ${sigObj.regime.replace(/_/g, ' ')} · Sizing: ${marginSizeStr}`;
-            sub.textContent = recommends + `. Place Limit Buy Order ${Math.round(entryOffset*100)}¢ below Close at $` + fmt(price - entryOffset, 2) + ` (0.25×ATR dip). Targets: TP1 +${Math.round(tp1*100)}¢ (Fee-Neutral), TP2 +${Math.round(tp2*100)}¢, Stop Loss: Trailing ${slCoeff}x ATR.`;
+            const dipMultStr = sigObj.regime === 'RANGE_BOUND_SUPPORT' ? '0.30×ATR deep wick' : '0.25×ATR dip';
+            const runnerFloorNote = sigObj.regime === 'RANGE_BOUND_SUPPORT' ? ' (+15¢ Runner Floor)' : '';
+            sub.textContent = recommends + `. Place Limit Buy Order ${Math.round(entryOffset*100)}¢ below Close at $` + fmt(price - entryOffset, 2) + ` (${dipMultStr}). Targets: TP1 +${Math.round(tp1*100)}¢, TP2 +${Math.round(tp2*100)}¢${runnerFloorNote}, Stop Loss: Trailing ${slCoeff}x ATR.`;
         } else {
             lbl.textContent = '🟨 YELLOW Standby Mode (100% Cash)';
             if (sigObj.regime === 'MARKET_CHOP') {
@@ -2031,3 +2042,4 @@ setInterval(load, 30000);
 </script>
 </body>
 </html>
+
