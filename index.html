@@ -482,10 +482,16 @@ let currentStrategyMode = 'adaptive';
 let htfSignalGlobal = 'yellow'; // Global HTF trend for gauge
 let trades = JSON.parse(localStorage.getItem('sol_trades_' + today()) || '[]');
 let lastSignal = null;
+let lastSignalKey = null;
 let consecutiveGreen = 0;
 let cooldownBars = 0;
 let lastRedBar = null;
 const charts = {};
+
+function getSessionName() {
+    const hour = new Date().getUTCHours();
+    return (hour >= 13 && hour < 21) || (hour >= 0 && hour < 4) ? 'Session Active' : 'Off-hours';
+}
 
 function today() {
     return new Date().toISOString().slice(0,10);
@@ -1553,6 +1559,7 @@ async function load() {
         const adxOK=curADX!=null&&curADX>45; // FIXED: Elevated from >25 to >45 for Sniper Gating
         const crossUp=isFisherCrossUp(fisher, fishSig);
         const sessionOK=isGoodSession();
+        const sessName = getSessionName();
 
         setInd('cci-val', 'cci-arr', lastVal(cci), cciUp);
         setInd('fish-val', 'fish-arr', lastVal(fisher), fishUp);
