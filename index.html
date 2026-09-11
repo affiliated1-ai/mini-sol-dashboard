@@ -217,11 +217,13 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 <!-- DEVNET BOT STATUS BAR -->
 <div class="bot-bar" id="bot-bar">
   <div class="bot-left">
-    <div class="bot-badge offline" id="bot-badge" onclick="promptBotUrl()" title="Click to configure Bot URL">
+    <div class="bot-badge offline" id="bot-badge" onclick="promptRpcApiConfig()" title="Click to configure RPC & Bot API">
       <span class="bot-dot" id="bot-dot"></span>
       <span id="bot-status-text">Devnet Bot: Offline (3001)</span>
     </div>
     <div class="bot-stats-row" id="bot-stats">
+      <span>Net: <b id="bot-net-display" style="color:var(--yellow)">DEVNET</b></span>
+      <span>RPC: <b id="bot-rpc-display" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom">api.devnet.solana.com</b></span>
       <span>Bal: <b id="bot-bal">$240.00</b></span>
       <span>Day PnL: <b id="bot-pnl">$0.00</b></span>
       <span>Positions: <b id="bot-pos-count">0/3</b></span>
@@ -230,8 +232,10 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
   <div class="bot-actions">
     <button class="bot-btn active" id="bot-auto-btn" onclick="toggleBotAutoTrade()" title="Toggle automated order execution on signals">Auto-Trade: ON</button>
     <button class="bot-btn" id="bot-halt-btn" onclick="toggleBotHalt()" title="Emergency stop on backend bot">Halt</button>
-    <button class="bot-btn" onclick="testBotPing()" title="Send test ping to bot">⚡ Ping</button>
-    <button class="bot-btn cfg" onclick="promptBotUrl()" title="Configure Bot URL">⚙️ Config</button>
+    <button class="bot-btn" onclick="testBotPing()" title="Send test ping to bot">⚡ Bot Ping</button>
+    <button class="bot-btn" onclick="testRpcConnection()" title="Test Solana RPC connection">⚡ RPC Ping</button>
+    <button class="bot-btn" id="tg-btn" onclick="promptTelegramConfig()" title="Configure and test Telegram alerts">✈️ Telegram</button>
+    <button class="bot-btn cfg" onclick="promptRpcApiConfig()" title="Configure Solana RPC, Network, and Bot API">⚙️ RPC &amp; API</button>
   </div>
 </div>
 
@@ -538,8 +542,40 @@ Devnet Auto-Trader Bot Relay (v10 Integration)
 let botState = null;
 let botOnline = false;
 
+function getAppConfig() {
+    const defaults = {
+        NETWORK: 'devnet',
+        SOLANA_RPC_URL: 'https://api.devnet.solana.com',
+        BOT_URL: 'http://localhost:3001',
+        BINANCE_API_URL: 'https://data-api.binance.vision',
+        TELEGRAM_TOKEN: '',
+        TELEGRAM_CHAT_ID: ''
+    };
+    const loaded = window.DASHBOARD_CONFIG || {};
+    return {
+        network: localStorage.getItem('sol_network') || loaded.NETWORK || defaults.NETWORK,
+        rpcUrl: localStorage.getItem('sol_rpc_url') || loaded.SOLANA_RPC_URL || defaults.SOLANA_RPC_URL,
+        botUrl: localStorage.getItem('sol_bot_url') || loaded.BOT_URL || defaults.BOT_URL,
+        binanceApi: localStorage.getItem('sol_binance_api') || loaded.BINANCE_API_URL || defaults.BINANCE_API_URL,
+        tgToken: localStorage.getItem('sol_tg_token') || loaded.TELEGRAM_TOKEN || defaults.TELEGRAM_TOKEN,
+        tgChatId: localStorage.getItem('sol_tg_chat_id') || loaded.TELEGRAM_CHAT_ID || defaults.TELEGRAM_CHAT_ID
+    };
+}
+
 function getBotUrl() {
-    return localStorage.getItem('sol_bot_url') || window.DASHBOARD_CONFIG?.BOT_URL || 'http://localhost:3001';
+    return getAppConfig().botUrl;
+}
+
+function getSolanaRpcUrl() {
+    return getAppConfig().rpcUrl;
+}
+
+function getNetwork() {
+    return getAppConfig().network;
+}
+
+function getBinanceApiUrl() {
+    return getAppConfig().binanceApi;
 }
 
 function isBotAutoTradeEnabled() {
@@ -552,12 +588,95 @@ function setBotAutoTrade(enabled) {
 }
 
 function promptBotUrl() {
-    const cur = getBotUrl();
-    const next = prompt('Enter Devnet Auto-Trader Bot URL (e.g. http://localhost:3001):', cur);
-    if (next && next.trim() && next.trim() !== cur) {
-        localStorage.setItem('sol_bot_url', next.trim());
-        showToast('Bot URL Updated', next.trim());
-        pollBotState();
+    promptRpcApiConfig();
+}
+
+function promptRpcApiConfig() {
+    const cur = getAppConfig();
+    const choice = prompt(
+        `⚙️ SOLANA RPC & API CONFIGURATION\n` +
+        `• Active Network: ${cur.network.toUpperCase()}\n` +
+        `• Solana RPC: ${cur.rpcUrl}\n` +
+        `• Devnet Bot API: ${cur.botUrl}\n` +
+        `• Market Data API: ${cur.binanceApi}\n\n` +
+        `Choose what to configure:\n` +
+        `1: Toggle Network (Devnet <-> Mainnet)\n` +
+        `2: Change Solana RPC URL\n` +
+        `3: Change Bot API URL (server.js)\n` +
+        `4: Change Market Data API URL\n` +
+        `5: Reset to config.js defaults\n\n` +
+        `Enter 1, 2, 3, 4, or 5:`,
+        '1'
+    );
+    if (!choice) return;
+
+    if (choice === '1') {
+        const isDev = cur.network.toLowerCase().includes('dev');
+        const nextNet = isDev ? 'mainnet-beta' : 'devnet';
+        localStorage.setItem('sol_network', nextNet);
+        if (nextNet === 'devnet' && cur.rpcUrl.includes('mainnet')) {
+            localStorage.setItem('sol_rpc_url', 'https://api.devnet.solana.com');
+        } else if (nextNet === 'mainnet-beta' && cur.rpcUrl.includes('devnet')) {
+            localStorage.setItem('sol_rpc_url', 'https://api.mainnet-beta.solana.com');
+        }
+        showToast('Network Updated', `Switched to ${nextNet.toUpperCase()}`);
+    } else if (choice === '2') {
+        const nextRpc = prompt(`Enter Solana RPC Endpoint:\n(Devnet: https://api.devnet.solana.com or your QuickNode/Helius key)`, cur.rpcUrl);
+        if (nextRpc && nextRpc.trim()) {
+            localStorage.setItem('sol_rpc_url', nextRpc.trim());
+            showToast('RPC Saved', nextRpc.trim());
+            testRpcConnection();
+        }
+    } else if (choice === '3') {
+        const nextBot = prompt(`Enter Devnet Bot API Endpoint (server.js):\n(Default is http://localhost:3001)`, cur.botUrl);
+        if (nextBot && nextBot.trim()) {
+            localStorage.setItem('sol_bot_url', nextBot.trim());
+            showToast('Bot API Saved', nextBot.trim());
+            pollBotState();
+        }
+    } else if (choice === '4') {
+        const nextApi = prompt(`Enter Market Data API (Binance Base URL):`, cur.binanceApi);
+        if (nextApi && nextApi.trim()) {
+            localStorage.setItem('sol_binance_api', nextApi.trim());
+            showToast('Market API Saved', nextApi.trim());
+            load();
+        }
+    } else if (choice === '5') {
+        if (confirm('Reset RPC and API settings back to config.js file values?')) {
+            localStorage.removeItem('sol_network');
+            localStorage.removeItem('sol_rpc_url');
+            localStorage.removeItem('sol_bot_url');
+            localStorage.removeItem('sol_binance_api');
+            showToast('Config Reset', 'Loaded variables from config.js');
+        }
+    }
+    updateBotUI();
+}
+
+async function testRpcConnection() {
+    const cfg = getAppConfig();
+    showToast('⚡ Solana RPC', `Testing connection to ${cfg.rpcUrl}...`);
+    const t0 = performance.now();
+    try {
+        const res = await fetch(cfg.rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'getSlot',
+                params: [{ commitment: 'processed' }]
+            })
+        });
+        const latency = Math.round(performance.now() - t0);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error.message || 'RPC Error');
+        showToast('✅ RPC Connected', `Network: ${cfg.network.toUpperCase()}\nSlot: #${data.result} (${latency}ms)`);
+        alert(`✅ Solana RPC Connection Verified!\n\nNetwork: ${cfg.network.toUpperCase()}\nEndpoint: ${cfg.rpcUrl}\nCurrent Slot: #${data.result}\nLatency: ${latency}ms`);
+    } catch(err) {
+        showToast('❌ RPC Error', err.message);
+        alert(`❌ Solana RPC Test Failed:\n${err.message}\n\nEndpoint: ${cfg.rpcUrl}\nVerify your internet connection and RPC URL.`);
     }
 }
 
@@ -619,6 +738,21 @@ function updateBotUI() {
     const posPanel = document.getElementById('bot-pos-panel');
     const posTbody = document.getElementById('bot-pos-tbody');
 
+    const appCfg = getAppConfig();
+    const netEl = document.getElementById('bot-net-display');
+    const rpcEl = document.getElementById('bot-rpc-display');
+    if (netEl) {
+        const isDev = appCfg.network.toLowerCase().includes('dev');
+        netEl.textContent = isDev ? 'DEVNET' : 'MAINNET';
+        netEl.style.color = isDev ? 'var(--yellow)' : 'var(--green)';
+    }
+    if (rpcEl) {
+        let hostname = appCfg.rpcUrl;
+        try { hostname = new URL(appCfg.rpcUrl).hostname; } catch(e) {}
+        rpcEl.textContent = hostname;
+        rpcEl.title = `Active Solana RPC: ${appCfg.rpcUrl} (${appCfg.network})`;
+    }
+
     const autoOn = isBotAutoTradeEnabled();
     if (autoBtn) {
         autoBtn.textContent = autoOn ? 'Auto-Trade: ON' : 'Auto-Trade: OFF';
@@ -671,6 +805,20 @@ function updateBotUI() {
         }
     }
 
+    const tgCfg = getTelegramConfig();
+    const tgBtn = document.getElementById('tg-btn');
+    if (tgBtn) {
+        if (tgCfg.token && tgCfg.chatId) {
+            tgBtn.className = 'bot-btn active';
+            tgBtn.textContent = '✈️ TG: On';
+            tgBtn.title = `Telegram connected (Chat: ${tgCfg.chatId}). Click to test or edit.`;
+        } else {
+            tgBtn.className = 'bot-btn';
+            tgBtn.textContent = '✈️ TG: Set';
+            tgBtn.title = 'Telegram not configured. Click to enter Bot Token & Chat ID.';
+        }
+    }
+
     if (openPositions.length > 0) {
         if (posPanel) posPanel.style.display = 'block';
         if (posTbody) {
@@ -719,8 +867,11 @@ async function sendSignalToBot(signal, price, atrVal, entryPrice, entryOffset, s
         console.log('[BOT] Auto-trade toggle is OFF. Signal not dispatched.');
         return;
     }
-    const botUrl = getBotUrl();
+    const cfg = getAppConfig();
+    const botUrl = cfg.botUrl;
     const payload = {
+        network: cfg.network,
+        rpcUrl: cfg.rpcUrl,
         direction: signal,
         price: price,
         atr: atrVal,
@@ -870,8 +1021,9 @@ async function runLiveBacktest() {
     btn.disabled = true;
     
     try {
-        const res_15m = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${currentSymbol}&interval=15m&limit=400`);
-        const res_1h = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${currentSymbol}&interval=1h&limit=150`);
+        const baseApi = getBinanceApiUrl();
+        const res_15m = await fetch(`${baseApi}/api/v3/klines?symbol=${currentSymbol}&interval=15m&limit=400`);
+        const res_1h = await fetch(`${baseApi}/api/v3/klines?symbol=${currentSymbol}&interval=1h&limit=150`);
         
         if (!res_15m.ok || !res_1h.ok) throw new Error('Binance fetch failed.');
         
@@ -1559,16 +1711,17 @@ async function load() {
     document.getElementById('pair-label').textContent=currentAsset+'/USDT '+currentTF+' sniper signal';
 
     try {
-        const res=await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${currentSymbol}&interval=${currentTF}&limit=200`);
+        const baseApi = getBinanceApiUrl();
+        const res=await fetch(`${baseApi}/api/v3/klines?symbol=${currentSymbol}&interval=${currentTF}&limit=200`);
         if(!res.ok) throw new Error('HTTP '+res.status);
         const raw=await res.json();
 
         const htfTF = currentTF==='4h'?'1d': currentTF==='1h'?'4h':'1h';
         const [rawlh, raw5m] = await Promise.all([
-            fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${currentSymbol}&interval=${htfTF}&limit=100`)
+            fetch(`${baseApi}/api/v3/klines?symbol=${currentSymbol}&interval=${htfTF}&limit=100`)
             .then(r=>r.ok?r.json():[])
             .catch(()=>[]),
-            fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${currentSymbol}&interval=5m&limit=100`)
+            fetch(`${baseApi}/api/v3/klines?symbol=${currentSymbol}&interval=5m&limit=100`)
             .then(r=>r.ok?r.json():[])
             .catch(()=>[])
         ]);
@@ -1993,22 +2146,95 @@ function showToast(title, body) {
     toast._t = setTimeout(() => { toast.className = ''; }, 6000);
 }
 
-async function sendTelegram(title, body, signal) {
-    const cfg = window.DASHBOARD_CONFIG || {};
-    if (!cfg.TELEGRAM_TOKEN || !cfg.TELEGRAM_CHAT_ID) return;
-    const text = `<b>${title}</b>\n${body}`;
+function getTelegramConfig() {
+    return {
+        token: localStorage.getItem('sol_tg_token') || window.DASHBOARD_CONFIG?.TELEGRAM_TOKEN || '',
+        chatId: localStorage.getItem('sol_tg_chat_id') || window.DASHBOARD_CONFIG?.TELEGRAM_CHAT_ID || ''
+    };
+}
+
+function promptTelegramConfig() {
+    const cur = getTelegramConfig();
+    const token = prompt('Enter Telegram Bot Token (from @BotFather):', cur.token);
+    if (token === null) return;
+    const chatId = prompt('Enter Telegram Chat ID (e.g. 123456789 or @channel):', cur.chatId);
+    if (chatId === null) return;
+
+    localStorage.setItem('sol_tg_token', token.trim());
+    localStorage.setItem('sol_tg_chat_id', chatId.trim());
+    updateBotUI();
+
+    if (token.trim() && chatId.trim()) {
+        const testNow = confirm('Telegram credentials saved!\n\nWould you like to send a test ping to your Telegram chat now?');
+        if (testNow) testTelegramAlert();
+    } else {
+        showToast('Telegram Config', 'Credentials cleared.');
+    }
+}
+
+async function testTelegramAlert() {
+    const cfg = getTelegramConfig();
+    if (!cfg.token || !cfg.chatId) {
+        alert('Please enter both Telegram Bot Token and Chat ID first.');
+        promptTelegramConfig();
+        return;
+    }
+    showToast('✈️ Telegram', 'Sending test ping to Telegram...');
     try {
-        await fetch(`https://api.telegram.org/bot${cfg.TELEGRAM_TOKEN}/sendMessage`, {
+        const title = '🟩 REVERSAL SNIPER TEST';
+        const body = `🎯 <b>SOL/USDT Telegram Alerts Connected!</b>\n` +
+                     `Time: ${new Date().toLocaleTimeString()}\n` +
+                     `Status: Active & ready for live sniper signals.`;
+        const res = await fetch(`https://api.telegram.org/bot${cfg.token}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                chat_id: cfg.TELEGRAM_CHAT_ID,
+                chat_id: cfg.chatId,
+                text: `<b>${title}</b>\n${body}`,
+                parse_mode: 'HTML'
+            })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            showToast('✅ Telegram Success', 'Test alert received in Telegram!');
+            alert('✅ Success! Test message received in your Telegram.');
+        } else {
+            const desc = data.description || 'Unknown error';
+            showToast('❌ Telegram Error', desc);
+            alert(`Telegram API Error (HTTP ${data.error_code}): ${desc}\n\nTroubleshooting:\n• If "chat not found": You must open your bot in Telegram and click START (/start) first.\n• If "Unauthorized": Verify your Bot Token from @BotFather.`);
+        }
+    } catch(err) {
+        showToast('❌ Network Error', err.message);
+        alert('Network connection error contacting Telegram: ' + err.message);
+    }
+}
+
+async function sendTelegram(title, body, signal) {
+    const cfg = getTelegramConfig();
+    if (!cfg.token || !cfg.chatId) {
+        console.warn('[Telegram] No Bot Token or Chat ID configured. Click "✈️ Telegram" to setup.');
+        return;
+    }
+    const text = `<b>${title}</b>\n${body}`;
+    try {
+        const res = await fetch(`https://api.telegram.org/bot${cfg.token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: cfg.chatId,
                 text,
                 parse_mode: 'HTML'
             })
         });
+        const data = await res.json();
+        if (!data.ok) {
+            console.error('[Telegram Error]', data.error_code, data.description);
+            showToast('Telegram Error', `${data.description} (${data.error_code})`);
+        } else {
+            console.log('[Telegram Alert Sent]', title);
+        }
     } catch(e) {
-        console.warn('Telegram send failed:', e.message);
+        console.warn('[Telegram] Send failed:', e.message);
     }
 }
 
@@ -2052,7 +2278,8 @@ async function autoEvalAlert(id) {
     const entry = alertLog.find(e => e.id === id);
     if (!entry || entry.outcome !== null) return;
     try {
-        const res = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${entry.asset}USDT&interval=${entry.tf}&limit=10`);
+        const baseApi = getBinanceApiUrl();
+        const res = await fetch(`${baseApi}/api/v3/klines?symbol=${entry.asset}USDT&interval=${entry.tf}&limit=10`);
         if (!res.ok) return;
         const bars = await res.json();
         const isLong = entry.signal === 'green';
