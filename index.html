@@ -143,6 +143,33 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 .at-wl{display:flex;gap:3px}
 .at-wl button{font-size:9px;padding:1px 5px;border-radius:4px;border:.5px solid currentColor;background:transparent;cursor:pointer;font-weight:600}
 .at-wl .w-btn{color:var(--green)}.at-wl .l-btn{color:var(--red)}.at-wl .s-btn{color:var(--muted)}
+
+/* BOT INTEGRATION STYLES */
+.bot-bar{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;flex-wrap:wrap;gap:10px}
+.bot-left{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.bot-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:.5px solid var(--border-strong);cursor:pointer;user-select:none;transition:all .15s}
+.bot-badge.online{background:rgba(34,197,94,0.12);color:var(--green);border-color:rgba(34,197,94,0.4)}
+.bot-badge.offline{background:rgba(239,68,68,0.12);color:var(--red);border-color:rgba(239,68,68,0.4)}
+.bot-badge.halted{background:rgba(245,158,11,0.12);color:var(--yellow);border-color:rgba(245,158,11,0.4)}
+.bot-dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+.bot-dot.pulse{animation:botPulse 1.5s infinite}
+@keyframes botPulse{0%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(1.3)}100%{opacity:1;transform:scale(1)}}
+.bot-stats-row{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.bot-stats-row b{color:var(--text);font-variant-numeric:tabular-nums}
+.bot-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.bot-btn{font-size:11px;font-weight:600;padding:5px 11px;border-radius:6px;border:.5px solid var(--border-strong);background:var(--surface2);color:var(--text2);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:4px}
+.bot-btn:hover{background:var(--border);color:var(--text)}
+.bot-btn.active{background:var(--green);color:#fff;border-color:var(--green)}
+.bot-btn.halted{background:var(--red);color:#fff;border-color:var(--red)}
+.bot-btn.cfg{background:transparent}
+.bot-pos-panel{background:var(--surface);border:.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px}
+.bot-pos-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;font-weight:500;flex-wrap:wrap;gap:6px}
+.bot-pos-table{width:100%;border-collapse:collapse;font-size:11px}
+.bot-pos-table th{color:var(--muted);font-weight:500;text-align:right;padding:5px 8px;text-transform:uppercase;letter-spacing:.03em;background:var(--surface2)}
+.bot-pos-table th:first-child,.bot-pos-table td:first-child{text-align:left}
+.bot-pos-table td{padding:5px 8px;border-top:.5px solid var(--border);text-align:right;font-variant-numeric:tabular-nums}
+.bot-close-btn{font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;border:.5px solid var(--red);color:var(--red);background:transparent;cursor:pointer;transition:all .15s}
+.bot-close-btn:hover{background:var(--red);color:#fff}
 </style>
 </head>
 <body>
@@ -184,6 +211,53 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
     <button class="pill active" onclick="selectStrategy(this, 'adaptive')">Adaptive Optimizing</button>
     <button class="pill" onclick="selectStrategy(this, 'oversold_hook')">Oversold Hook (v7)</button>
     <button class="pill" onclick="selectStrategy(this, 'bull_div')">Bull Divergence (v8)</button>
+  </div>
+</div>
+
+<!-- DEVNET BOT STATUS BAR -->
+<div class="bot-bar" id="bot-bar">
+  <div class="bot-left">
+    <div class="bot-badge offline" id="bot-badge" onclick="promptBotUrl()" title="Click to configure Bot URL">
+      <span class="bot-dot" id="bot-dot"></span>
+      <span id="bot-status-text">Devnet Bot: Offline (3001)</span>
+    </div>
+    <div class="bot-stats-row" id="bot-stats">
+      <span>Bal: <b id="bot-bal">$240.00</b></span>
+      <span>Day PnL: <b id="bot-pnl">$0.00</b></span>
+      <span>Positions: <b id="bot-pos-count">0/3</b></span>
+    </div>
+  </div>
+  <div class="bot-actions">
+    <button class="bot-btn active" id="bot-auto-btn" onclick="toggleBotAutoTrade()" title="Toggle automated order execution on signals">Auto-Trade: ON</button>
+    <button class="bot-btn" id="bot-halt-btn" onclick="toggleBotHalt()" title="Emergency stop on backend bot">Halt</button>
+    <button class="bot-btn" onclick="testBotPing()" title="Send test ping to bot">⚡ Ping</button>
+    <button class="bot-btn cfg" onclick="promptBotUrl()" title="Configure Bot URL">⚙️ Config</button>
+  </div>
+</div>
+
+<!-- BOT OPEN POSITIONS TRAY -->
+<div class="bot-pos-panel" id="bot-pos-panel" style="display:none">
+  <div class="bot-pos-header">
+    <span>🤖 Jupiter Devnet Live Positions</span>
+    <span style="font-size:11px;color:var(--muted)" id="bot-pos-sub">Synced with server.js</span>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="bot-pos-table">
+      <thead>
+        <tr>
+          <th>Asset</th>
+          <th>Side</th>
+          <th>Status</th>
+          <th>Limit/Fill</th>
+          <th>Margin</th>
+          <th>TP1 / TP2</th>
+          <th>Stop Loss</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="bot-pos-tbody">
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -457,6 +531,245 @@ let consecutiveGreen = 0;
 let cooldownBars = 0;
 let lastRedBar = null;
 const charts = {};
+
+/*
+Devnet Auto-Trader Bot Relay (v10 Integration)
+*/
+let botState = null;
+let botOnline = false;
+
+function getBotUrl() {
+    return localStorage.getItem('sol_bot_url') || window.DASHBOARD_CONFIG?.BOT_URL || 'http://localhost:3001';
+}
+
+function isBotAutoTradeEnabled() {
+    return localStorage.getItem('sol_bot_autotrade') !== 'false';
+}
+
+function setBotAutoTrade(enabled) {
+    localStorage.setItem('sol_bot_autotrade', enabled ? 'true' : 'false');
+    updateBotUI();
+}
+
+function promptBotUrl() {
+    const cur = getBotUrl();
+    const next = prompt('Enter Devnet Auto-Trader Bot URL (e.g. http://localhost:3001):', cur);
+    if (next && next.trim() && next.trim() !== cur) {
+        localStorage.setItem('sol_bot_url', next.trim());
+        showToast('Bot URL Updated', next.trim());
+        pollBotState();
+    }
+}
+
+function toggleBotAutoTrade() {
+    const cur = isBotAutoTradeEnabled();
+    setBotAutoTrade(!cur);
+    showToast('Bot Auto-Trade', !cur ? 'Auto-Trading ENABLED: Live alerts dispatch to Devnet bot.' : 'Auto-Trading PAUSED: Signals logged locally only.');
+}
+
+async function toggleBotHalt() {
+    const botUrl = getBotUrl();
+    const isHalted = botState?.halted;
+    const endpoint = isHalted ? '/resume' : '/halt';
+    try {
+        const res = await fetch(`${botUrl}${endpoint}`, { method: 'POST' });
+        const data = await res.json();
+        showToast('Bot Execution', isHalted ? 'Bot RESUMED. Order execution active.' : 'Bot HALTED. Trading suspended.');
+        pollBotState();
+    } catch (e) {
+        alert('Failed to send halt/resume to bot: ' + e.message);
+    }
+}
+
+async function testBotPing() {
+    const botUrl = getBotUrl();
+    try {
+        const res = await fetch(`${botUrl}/health`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        showToast('Bot Ping Success', `Connected to Devnet Bot on ${botUrl}\nOpen Positions: ${data.positions} | Balance: $${fmt(data.balance, 2)}`);
+        pollBotState();
+    } catch (e) {
+        alert(`Cannot reach bot at ${botUrl}.\nEnsure "node server.js" is running on port 3001.\nError: ${e.message}`);
+    }
+}
+
+async function pollBotState() {
+    const botUrl = getBotUrl();
+    try {
+        const res = await fetch(`${botUrl}/state`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        botState = await res.json();
+        botOnline = true;
+    } catch (e) {
+        botOnline = false;
+    }
+    updateBotUI();
+}
+
+function updateBotUI() {
+    const badge = document.getElementById('bot-badge');
+    const dot = document.getElementById('bot-dot');
+    const text = document.getElementById('bot-status-text');
+    const autoBtn = document.getElementById('bot-auto-btn');
+    const haltBtn = document.getElementById('bot-halt-btn');
+    const balEl = document.getElementById('bot-bal');
+    const pnlEl = document.getElementById('bot-pnl');
+    const posCountEl = document.getElementById('bot-pos-count');
+    const posPanel = document.getElementById('bot-pos-panel');
+    const posTbody = document.getElementById('bot-pos-tbody');
+
+    const autoOn = isBotAutoTradeEnabled();
+    if (autoBtn) {
+        autoBtn.textContent = autoOn ? 'Auto-Trade: ON' : 'Auto-Trade: OFF';
+        autoBtn.className = 'bot-btn ' + (autoOn ? 'active' : '');
+    }
+
+    if (!botOnline || !botState) {
+        if (badge) {
+            badge.className = 'bot-badge offline';
+            badge.title = 'Bot offline. Click to configure URL.';
+        }
+        if (dot) dot.className = 'bot-dot';
+        if (text) text.textContent = 'Devnet Bot: Offline';
+        if (haltBtn) {
+            haltBtn.textContent = 'Halt';
+            haltBtn.disabled = true;
+            haltBtn.className = 'bot-btn';
+        }
+        if (posPanel) posPanel.style.display = 'none';
+        return;
+    }
+
+    if (haltBtn) haltBtn.disabled = false;
+    if (balEl) balEl.textContent = '$' + fmt(botState.balance || 240, 2);
+    if (pnlEl) {
+        const pnl = botState.dailyPnL || 0;
+        pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + fmt(pnl, 2);
+        pnlEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+    const openPositions = botState.positions || [];
+    const maxPos = botState.config?.MAX_POSITIONS || 3;
+    if (posCountEl) posCountEl.textContent = `${openPositions.length}/${maxPos}`;
+
+    if (botState.halted) {
+        if (badge) badge.className = 'bot-badge halted';
+        if (dot) dot.className = 'bot-dot pulse';
+        if (text) text.textContent = 'Devnet Bot: HALTED';
+        if (haltBtn) {
+            haltBtn.textContent = 'Resume';
+            haltBtn.className = 'bot-btn halted';
+        }
+    } else {
+        if (badge) badge.className = 'bot-badge online';
+        if (dot) dot.className = 'bot-dot pulse';
+        const port = getBotUrl().split(':').pop().replace(/[^0-9]/g, '') || '3001';
+        text.textContent = autoOn ? `Devnet Bot: Live (:${port})` : `Devnet Bot: Standby (:${port})`;
+        if (haltBtn) {
+            haltBtn.textContent = 'Halt';
+            haltBtn.className = 'bot-btn';
+        }
+    }
+
+    if (openPositions.length > 0) {
+        if (posPanel) posPanel.style.display = 'block';
+        if (posTbody) {
+            posTbody.innerHTML = openPositions.map(p => {
+                const isLong = p.side === 'Long';
+                const sideCls = isLong ? 't-side-long' : 't-side-short';
+                const fillPrice = p.fillPrice || p.entryPrice;
+                return `<tr>
+                    <td><b>${p.asset}</b></td>
+                    <td class="${sideCls}"><b>${p.side}</b></td>
+                    <td><span class="at-outcome ${p.status === 'open' ? 'win' : 'open'}">${p.status.toUpperCase()}</span></td>
+                    <td>$${fmt(fillPrice, 2)}</td>
+                    <td>$${fmt(p.margin, 2)} (${p.leverage}x)</td>
+                    <td>+$${fmt(p.takeProfit - fillPrice, 2)}</td>
+                    <td>-$${fmt(fillPrice - p.stopLoss, 2)}</td>
+                    <td><button class="bot-close-btn" onclick="botClosePosition('${p.id}', null, 'Manual Close')">Close</button></td>
+                </tr>`;
+            }).join('');
+        }
+    } else {
+        if (posPanel) posPanel.style.display = 'none';
+    }
+}
+
+async function botClosePosition(positionId, exitPrice, closeReason='Manual') {
+    const botUrl = getBotUrl();
+    const curPrice = exitPrice || parseFloat(document.getElementById('price').textContent.replace(/[^0-9.]/g, '')) || 0;
+    try {
+        const res = await fetch(`${botUrl}/close`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ positionId, exitPrice: curPrice, closeReason })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            showToast('Position Closed', `Order closed on Jupiter Devnet @ $${fmt(curPrice, 2)}`);
+        }
+        pollBotState();
+    } catch (e) {
+        console.error('Failed to close position on bot:', e);
+    }
+}
+
+async function sendSignalToBot(signal, price, atrVal, entryPrice, entryOffset, sigObj) {
+    if (!isBotAutoTradeEnabled()) {
+        console.log('[BOT] Auto-trade toggle is OFF. Signal not dispatched.');
+        return;
+    }
+    const botUrl = getBotUrl();
+    const payload = {
+        direction: signal,
+        price: price,
+        atr: atrVal,
+        confidenceScore: sigObj?.confirmScore ?? 3,
+        asset: currentAsset,
+        timeframe: currentTF,
+        reason: sigObj?.reason || (signal === 'green' ? 'reversal_hook' : 'standby'),
+        regime: sigObj?.regime || 'RANGE_BOUND_SUPPORT',
+        entryOffset: entryOffset,
+        tp1: sigObj?.tp1 || 0.35,
+        tp2: sigObj?.tp2 || (sigObj?.regime === 'RANGE_BOUND_SUPPORT' ? 0.55 : 0.75),
+        slCoeff: sigObj?.slCoeff || 1.5,
+        recommendedMargin: sigObj?.recommendedMargin || 120.00
+    };
+
+    try {
+        const res = await fetch(`${botUrl}/signal`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        console.log('[BOT RELAY RESPONSE]', data);
+
+        if (data.status === 'placed') {
+            showToast('🤖 Devnet Bot: Order Placed', `${payload.asset} Limit Buy @ $${fmt(data.entryPrice, 2)} | Margin: $${fmt(data.margin, 2)} (${data.leverage}x)`);
+        } else if (data.status === 'skip' || data.status === 'halted') {
+            console.log('[BOT RELAY]', data.message);
+        }
+        pollBotState();
+    } catch (err) {
+        console.warn('[BOT RELAY] Could not reach server.js at', botUrl, err.message);
+    }
+}
+
+async function checkFisherAutoClose(curPrice) {
+    if (!isBotAutoTradeEnabled() || !botState || !botState.positions) return;
+    const matching = botState.positions.filter(p => p.asset === currentAsset && p.status === 'open');
+    if (matching.length === 0) return;
+    for (const pos of matching) {
+        try {
+            await botClosePosition(pos.id, curPrice, '5m Fisher Cross-Down');
+            showToast('🤖 Bot: 5m Fisher Early Exit', `Closed ${pos.asset} runner position @ $${fmt(curPrice, 2)}`);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+}
 
 function getSessionName() {
     const hour = new Date().getUTCHours();
@@ -1452,6 +1765,7 @@ async function load() {
                 sellBlock.style.borderColor = 'var(--red)';
                 sellText.textContent = 'EXIT NOW';
                 sellText.style.color = 'var(--red)';
+                checkFisherAutoClose(cur);
             } else {
                 sellBlock.style.background = 'rgba(22,163,74,0.05)';
                 sellBlock.style.borderColor = 'var(--border-strong)';
@@ -1489,11 +1803,22 @@ async function load() {
 
         mkChart('cciChart', labels, [
             {label:'+100',data:labels.map(()=>100),borderColor:'rgba(137,135,129,0.4)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[3,3]},
+            {label:'0',data:labels.map(()=>0),borderColor:'rgba(137,135,129,0.2)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[2,2]},
             {label:'-100',data:labels.map(()=>-100),borderColor:'rgba(137,135,129,0.4)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[3,3]},
             {label:'CCI',data:cci, borderColor:cciUp?'#16a34a':'#dc2626',backgroundColor:cciUp?'rgba(22,163,74,0.07)':'rgba(220,38,38,0.07)',fill:false,tension:0.3,pointRadius:0,borderWidth:1.5}
         ],{
-            ticks: {callback:v=>Math.round(v)},
-            scale: {afterDataLimits(sc){sc.min=-200;sc.max=200;}}
+            ticks: {
+                stepSize: 100,
+                callback: v => [-300, -200, -100, 0, 100, 200, 300].includes(v) ? (v > 0 ? `+${v}` : `${v}`) : ''
+            },
+            scale: {
+                suggestedMin: -200,
+                suggestedMax: 200,
+                afterDataLimits(sc) {
+                    sc.min = Math.min(sc.min, -200);
+                    sc.max = Math.max(sc.max, 200);
+                }
+            }
         });
 
         mkChart('fishChart', labels, [
@@ -1878,6 +2203,9 @@ function fireAlertIfChanged(signal, price, cciUp, fishUp, tenkUp, sigObj) {
     if (signal === 'green') {
         sendTelegram(emoji + ' ' + label, body, signal);
     }
+
+    // Dispatch to Devnet Auto-Trader Bot (server.js v10)
+    sendSignalToBot(signal, price, curATRVal, entryPrice, entryOffset, sigObj);
 }
 
 const isDark = () => window.matchMedia('(prefers-color-scheme:dark)').matches;
@@ -2039,7 +2367,8 @@ document.getElementById('trade-list').addEventListener('click', function(e) {
 updateAlertBtn();
 load();
 setInterval(load, 30000);
+pollBotState();
+setInterval(pollBotState, 10000);
 </script>
 </body>
 </html>
-
