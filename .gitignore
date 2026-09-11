@@ -1,5 +1,6 @@
 # Wallet — NEVER commit
 wallet.json
+wallet-devnet.json
 *.json.bak
 
 # Secrets

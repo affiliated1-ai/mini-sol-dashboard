@@ -22,6 +22,7 @@ const { Telegraf } = require('telegraf');
 const jupiter    = require('./jupiter');
 const { log, loadState, saveState } = require('./utils');
 
+
 // ── Config from .env ──────────────────────────────────────────────
 const PORT             = parseInt(process.env.PORT            || '3001');
 const TELEGRAM_TOKEN   = process.env.TELEGRAM_TOKEN           || '';
@@ -30,6 +31,12 @@ const MAX_POSITIONS    = parseInt(process.env.MAX_POSITIONS   || '3');
 const DAILY_LOSS_LIMIT = parseFloat(process.env.DAILY_LOSS_LIMIT || '50');
 const STARTING_BALANCE = parseFloat(process.env.STARTING_BALANCE || '240');
 const FILL_TIMEOUT_MS  = parseInt(process.env.FILL_TIMEOUT_MS || '120000'); // 2 min
+
+// Load environment variables with Devnet as default fallback
+const SOLANA_NETWORK = process.env.SOLANA_NETWORK || 'devnet';
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+
+console.log(`[\({SOLANA_NETWORK.toUpperCase()}] Connected to RPC:\){SOLANA_RPC_URL}`);
 
 function getPullbackOffset(timeframe, atr) {
   const limits = {
