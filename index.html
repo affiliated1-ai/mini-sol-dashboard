@@ -62,8 +62,12 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 .chart-section{margin-bottom:14px}
 .chart-label{font-size:11px;color:var(--muted); margin-bottom:4px}
 .chart-wrap{position: relative;width:100%}
-.chart-wrap.main{height:280px}
-.chart-wrap.sub{height:88px}
+.chart-wrap.main{height:420px}
+.chart-wrap.sub{height:160px}
+@media (max-width:700px){
+    .chart-wrap.main{height:340px}
+    .chart-wrap.sub{height:135px}
+}
 .tracker{background: var(--surface); border:.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px}
 .tracker-header {display: flex; align-items:center; justify-content: space-between;margin-bottom:10px; flex-wrap:wrap;gap:8px}
 .tracker-title{font-size:13px;font-weight:500}
@@ -1951,9 +1955,9 @@ async function load() {
         mkCandleChart('priceChart', ohlcData, tenkanXY, vwmaXY, sma50XY);
 
         mkChart('cciChart', labels, [
-            {label:'+100',data:labels.map(()=>100),borderColor:'rgba(137,135,129,0.4)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[3,3]},
-            {label:'0',data:labels.map(()=>0),borderColor:'rgba(137,135,129,0.2)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[2,2]},
-            {label:'-100',data:labels.map(()=>-100),borderColor:'rgba(137,135,129,0.4)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[3,3]},
+            {label:'+100',data:labels.map(()=>100),borderColor:'rgba(137,135,129,0.4)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[3,3],_referenceLine:true},
+            {label:'0',data:labels.map(()=>0),borderColor:'rgba(137,135,129,0.2)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[2,2],_referenceLine:true},
+            {label:'-100',data:labels.map(()=>-100),borderColor:'rgba(137,135,129,0.4)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[3,3],_referenceLine:true},
             {label:'CCI',data:cci, borderColor:cciUp?'#16a34a':'#dc2626',backgroundColor:cciUp?'rgba(22,163,74,0.07)':'rgba(220,38,38,0.07)',fill:false,tension:0.3,pointRadius:0,borderWidth:1.5}
         ],{
             ticks: {
@@ -1973,12 +1977,12 @@ async function load() {
         mkChart('fishChart', labels, [
             {label:'Fisher',data:fisher,borderColor:'#2a78d6',backgroundColor:'rgba(42,120,214,0.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:1.5},
             {label:'Signal',data:fishSig,borderColor:'#dc2626',backgroundColor:'transparent',fill:false,tension:0.3,pointRadius:0,borderWidth:1.5}
-        ],{ticks:{callback:v=>Number(v).toFixed(2)}});
+        ],{ticks:{callback:v=>Number(v).toFixed(2)},dynamic:{padding:0.12,minimumSpan:2.4}});
 
         const atrColor = atrOK ? '#22c55e' : '#ef4444';
         mkChart('atrChart', labels, [
             {label:'ATR',data:atr,borderColor:atrColor,backgroundColor:atrOK?'rgba(34,197,94,0.07)':'rgba(239,68,68,0.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:1.5}
-        ],{ticks:{callback:v=>fmt(v,3)}});
+        ],{ticks:{callback:v=>fmt(v,3)},dynamic:{padding:0.12,minimumSpan:0.01}});
 
         document.getElementById('updated').textContent='Updated '+new Date().toLocaleTimeString() + ' | Binance Live (30s)';
     } catch(e) {
@@ -2392,6 +2396,38 @@ const gridColor = () => isDark() ? '#2c2c2a' : '#e1e0d9';
 const tickColor = () => '#898781';
 
 const zoomState = {};
+function visibleDataRange(chart, includeDataset) {
+    const xScale = chart.scales.x;
+    const minX = xScale && Number.isFinite(xScale.min) ? xScale.min : -Infinity;
+    const maxX = xScale && Number.isFinite(xScale.max) ? xScale.max : Infinity;
+    const values = [];
+    chart.data.datasets.forEach(dataset => {
+        if (includeDataset && !includeDataset(dataset)) return;
+        (dataset.data || []).forEach((point, index) => {
+            const pointX = point && typeof point === 'object' ? point.x : index;
+            if (pointX != null && (pointX < minX || pointX > maxX)) return;
+            if (point && typeof point === 'object' && point.h != null && point.l != null) {
+                values.push(Number(point.h), Number(point.l));
+            } else {
+                const value = point && typeof point === 'object' ? point.y : point;
+                if (value != null) values.push(Number(value));
+            }
+        });
+    });
+    return values.filter(Number.isFinite);
+}
+
+function applyDynamicYRange(scale, chart, paddingRatio, minimumSpan = 0) {
+    const values = visibleDataRange(chart, dataset => !dataset._referenceLine);
+    if (!values.length) return;
+    const dataMin = Math.min(...values);
+    const dataMax = Math.max(...values);
+    const span = Math.max(dataMax - dataMin, minimumSpan);
+    const padding = Math.max(span * paddingRatio, minimumSpan * paddingRatio);
+    scale.min = dataMin - padding;
+    scale.max = dataMax + padding;
+}
+
 function saveZoom(id){
     const c=charts[id]; if(!c)return;
     try{const x=c.scales.x; if(x&&x.min!=null)zoomState[id]={min:x.min,max:x.max};}catch(e){}
@@ -2483,6 +2519,10 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
                             return `${ctx.dataset.label}: $${fmt(ctx.parsed.y,2)}`;
                         }
                     }
+                },
+                zoom: {
+                    pan: { enabled: true, mode: 'x' },
+                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
                 }
             },
             scales: {
@@ -2496,7 +2536,8 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
                 y: {
                     grid: { color: gridColor() },
                     ticks: { color: tickColor(), font: { size: 10 }, callback: v => '$'+fmt(v,0) },
-                    border: { display: false }
+                    border: { display: false },
+                    afterDataLimits: scale => applyDynamicYRange(scale, scale.chart, 0.08, 0.10)
                 }
             }
         }
@@ -2516,7 +2557,11 @@ function mkChart(id, labels, datasets, yExtra={}){
             animation: { duration: 0 },
             plugins: {
                 legend: { display: false },
-                tooltip: { mode: 'index', intersect: false }
+                tooltip: { mode: 'index', intersect: false },
+                zoom: {
+                    pan: { enabled: true, mode: 'x' },
+                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+                }
             },
             scales: {
                 x: {
@@ -2528,7 +2573,8 @@ function mkChart(id, labels, datasets, yExtra={}){
                     grid: { color: gridColor() },
                     ticks: { color: tickColor(), font: { size: 10 }, ...(yExtra.ticks||{}) },
                     border: { display: false },
-                    ...(yExtra.scale||{})
+                    ...(yExtra.scale||{}),
+                    ...(yExtra.dynamic ? { afterDataLimits: scale => applyDynamicYRange(scale, scale.chart, yExtra.dynamic.padding, yExtra.dynamic.minimumSpan) } : {})
                 }
             }
         }
