@@ -555,7 +555,7 @@ function getAppConfig() {
     return {
         network: localStorage.getItem('sol_network') || loaded.NETWORK || defaults.NETWORK,
         rpcUrl: localStorage.getItem('sol_rpc_url') || loaded.SOLANA_RPC_URL || defaults.SOLANA_RPC_URL,
-        botUrl: localStorage.getItem('sol_bot_url') || loaded.BOT_URL || defaults.BOT_URL,
+        botUrl: (localStorage.getItem('sol_bot_url') || loaded.BOT_URL || defaults.BOT_URL).replace(/\/+$/, ''),
         binanceApi: localStorage.getItem('sol_binance_api') || loaded.BINANCE_API_URL || defaults.BINANCE_API_URL,
         tgToken: localStorage.getItem('sol_tg_token') || loaded.TELEGRAM_TOKEN || defaults.TELEGRAM_TOKEN,
         tgChatId: localStorage.getItem('sol_tg_chat_id') || loaded.TELEGRAM_CHAT_ID || defaults.TELEGRAM_CHAT_ID
