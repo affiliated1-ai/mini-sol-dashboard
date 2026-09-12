@@ -20,14 +20,15 @@ const path = require('path');
 const { log } = require('./utils');
 
 // ── Network toggle ────────────────────────────────────────────────
-const IS_DEVNET = process.env.DEVNET === 'true';
+const IS_DEVNET = process.env.DEVNET === 'true'
+  || (process.env.SOLANA_NETWORK || '').toLowerCase() === 'devnet';
 const NETWORK   = IS_DEVNET ? 'DEVNET' : 'MAINNET';
 
 // ── RPC endpoints ─────────────────────────────────────────────────
 const RPC_DEFAULT = IS_DEVNET
   ? 'https://api.devnet.solana.com'
   : 'https://api.mainnet-beta.solana.com';
-const RPC_URL = process.env.SOLANA_RPC || RPC_DEFAULT;
+const RPC_URL = process.env.SOLANA_RPC || process.env.SOLANA_RPC_URL || RPC_DEFAULT;
 
 // ── Keypair path ──────────────────────────────────────────────────
 // Use separate wallet files for devnet vs mainnet — never mix them
