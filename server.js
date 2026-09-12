@@ -85,11 +85,18 @@ setInterval(checkRollover, 60_000);
 // ── Telegram ──────────────────────────────────────────────────────
 const tg = TELEGRAM_TOKEN ? new Telegraf(TELEGRAM_TOKEN) : null;
 
-async function notify(msg) {
+async function sendTelegramMessage(msg) {
   log('[TG] ' + msg.replace(/<[^>]+>/g, ''));
-  if (!tg || !TELEGRAM_CHAT_ID) return;
+  if (!tg || !TELEGRAM_CHAT_ID) {
+    throw new Error('Telegram is not configured on the backend');
+  }
   try { await tg.telegram.sendMessage(TELEGRAM_CHAT_ID, msg, { parse_mode: 'HTML' }); }
-  catch (e) { log('[TG ERR] ' + e.message); }
+  catch (e) { log('[TG ERR] ' + e.message); throw e; }
+}
+
+async function notify(msg) {
+  try { await sendTelegramMessage(msg); }
+  catch (e) { log('[TG] ' + e.message); }
 }
 
 // ── Margin Sizing — compounding + confidence + regime ────────────
@@ -294,6 +301,26 @@ app.use(express.json());
 
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/config.js', (_req, res) => res.sendFile(path.join(__dirname, 'config.js')));
+
+app.post('/telegram/test', async (_req, res) => {
+  try {
+    await sendTelegramMessage('<b>REVERSAL SNIPER TEST</b>\nTelegram alerts are connected.');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/telegram', async (req, res) => {
+  const { title, body } = req.body || {};
+  if (!title || !body) return res.status(400).json({ ok: false, error: 'title and body are required' });
+  try {
+    await sendTelegramMessage(`<b>${title}</b>\n${body}`);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: e.message });
+  }
+});
 
 // Dashboard posts here on every signal change
 app.post('/signal', async (req, res) => {
