@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
     "check-idl": "node -e \"const p=require('path'),f=require('fs');const idl=p.join(__dirname,'idl','jupiter-perpetuals.json');console.log(f.existsSync(idl)?'✓ IDL found':'✗ IDL missing — download from solscan.io/account/PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu#programIdl');\""
   },
   "dependencies": {
