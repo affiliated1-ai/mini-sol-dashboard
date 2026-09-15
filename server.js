@@ -29,7 +29,8 @@ const jupiter = require('./jupiter');
 const { log, loadState, saveState } = require('./utils');
 
 // ── Config ────────────────────────────────────────────────────────
-const PORT = parseInt(process.env.PORT || '3001');
+const PORT = parseInt(process.env.PORT || '3001', 10);
+const HOST = process.env.HOST || '0.0.0.0';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const MAX_POSITIONS = parseInt(process.env.MAX_POSITIONS || '3');
@@ -363,7 +364,7 @@ setInterval(monitorPositions, MONITOR_INTERVAL);
 
 // ── Express API ───────────────────────────────────────────────────
 const app = express();
-app.use(cors({ origin: () => true }));
+app.use(cors({ origin: true }));
 app.use(express.json());
 
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
@@ -436,7 +437,7 @@ app.post('/resume', async (_req, res) => {
 
 const IS_DEVNET = process.env.DEVNET === 'true';
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   const pad = s => String(s).padEnd(26);
   log(`╔══════════════════════════════════════════╗`);
   log(`║  SOL Auto-Trader v10                     ║`);
