@@ -65,9 +65,10 @@ const PERP_PROGRAM_ID = new PublicKey(
     : 'PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu'
 );
 
-// ── JLP Pool (mainnet) ────────────────────────────────────────────
-// Source: https://developers.jup.ag/docs/perps/pool-account
-const JLP_POOL = new PublicKey('5BUwFW4nRbftYTDMbgxykoFWqWHPzahFSNAaaaJtVKsq');
+// ── Jupiter API base ──────────────────────────────────────────────
+const API = IS_DEVNET
+  ? 'https://perp.jup.ag/v1/devnet'
+  : 'https://perp.jup.ag/v1';
 
 // ── Custody accounts (mainnet) ────────────────────────────────────
 // Source: https://developers.jup.ag/docs/perps/custody-account
@@ -205,102 +206,38 @@ function derivePositionRequestPDA(positionPubkey, counter) {
  * @param {number} p.takeProfit     Take profit price (creates Trigger PositionRequest)
  * @returns {string} positionRequestPubkey (used to monitor execution)
  */
-async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, stopLoss, takeProfit }) {
-  const program  = getProgram();
-  const kp       = getKeypair();
-  const owner    = kp.publicKey;
-
-  if (!CUSTODY_ACCOUNTS[asset]) {
-    throw new Error(
-      IS_DEVNET
-        ? `${asset} not available on Jupiter devnet — only SOL is confirmed. Set DEVNET=false for mainnet.`
-        : `Unknown asset: ${asset}`
-    );
-  }
-
-  const custody           = CUSTODY_ACCOUNTS[asset];
-  const collateralCustody = getCollateralCustody(asset, side);
-  const mint              = TOKEN_MINTS[asset];
-  const collateralMint    = getCollateralMint(asset, side);
-
-  // Derive position PDA
-  const [positionPDA] = derivePositionPDA(owner, JLP_POOL, custody, side);
-
-  // Generate a unique counter for this request
-  const counter = Date.now() % 2**32;  // u64, keep within safe range
-  const [positionRequestPDA] = derivePositionRequestPDA(positionPDA, counter);
-
-  // PositionRequest ATA (receives/holds collateral tokens during execution)
-  const positionRequestATA = await getAssociatedTokenAddress(
-    collateralMint,
-    positionRequestPDA,
-    true,  // allowOwnerOffCurve = true for PDAs
-    TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID
+async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, stopLoss, takeProfit, leverage }) {
+  const kp  = getKeypair();
+  const mkt = MARKETS[asset];
+  if (!mkt) throw new Error(
+    IS_DEVNET
+      ? `${asset} not available on Jupiter devnet — only SOL is supported. Switch asset or set DEVNET=false.`
+      : `Unknown asset: ${asset}`
   );
 
-  // Trader's token account (source of collateral)
-  const traderCollateralATA = await getAssociatedTokenAddress(
-    collateralMint,
-    owner,
-    false,
-    TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID
-  );
+  log(`[${NETWORK}] placeLimitOrder: ${side} ${asset} @ $${limitPrice} | Margin $${marginUSDC} | ${leverage}×`);
 
-  // Convert amounts to on-chain atomic values
-  // USDC has 6 decimals: 25.00 USDC = 25_000_000
-  const collateralDeltaAtomic = Math.round(marginUSDC * 1e6);
-  // Size = collateral × leverage, in USD atomic (6 decimals)
-  const sizeUsdDeltaAtomic    = Math.round(marginUSDC * leverage * 1e6);
-  // Price slippage: the max price we'll accept (in USD atomic, 6 decimals)
-  // Long:  reject if price > limitPrice
-  // Short: reject if price < limitPrice
-  const priceSlippageAtomic   = Math.round(limitPrice * 1e6);
+  const resp = await fetch(`${API}/orders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      wallet:     kp.publicKey.toBase58(),
+      market:     mkt,
+      side:       side.toLowerCase(),
+      collateral: marginUSDC,
+      leverage,
+      price:      limitPrice,
+      stopLoss,
+      takeProfit,
+      orderType:  'limit',
+    }),
+  });
+  if (!resp.ok) throw new Error(`Jupiter API ${resp.status}: ${await resp.text()}`);
 
-  log(`[${NETWORK}] openPositionRequest: ${side} ${asset} | Margin $${marginUSDC} | Lev ${leverage}× | Limit $${limitPrice}`);
-  log(`[${NETWORK}] Position PDA: ${positionPDA.toBase58()}`);
-  log(`[${NETWORK}] Request PDA:  ${positionRequestPDA.toBase58()}`);
-
-  try {
-    const txSig = await program.methods
-      .openPositionRequest({
-        counter:           new anchor.BN(counter),
-        side:              side === 'Long' ? { long: {} } : { short: {} },
-        priceSlippage:     new anchor.BN(priceSlippageAtomic),
-        sizeUsdDelta:      new anchor.BN(sizeUsdDeltaAtomic),
-        collateralDelta:   new anchor.BN(collateralDeltaAtomic),
-        requestType:       { market: {} },   // Market execution (keeper fills ASAP)
-        jupiterMinimumOut: null,             // Only needed for cross-token swaps
-      })
-      .accounts({
-        owner,
-        pool:                JLP_POOL,
-        custody,
-        collateralCustody,
-        mint,
-        collateralMint,
-        position:            positionPDA,
-        positionRequest:     positionRequestPDA,
-        positionRequestAta:  positionRequestATA,
-        ownerTokenAccount:   traderCollateralATA,
-        tokenProgram:        TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram:       SystemProgram.programId,
-        rent:                SYSVAR_RENT_PUBKEY,
-      })
-      .rpc({ commitment: 'confirmed' });
-
-    log(`[${NETWORK}] openPositionRequest tx: ${txSig}`);
-
-    // Place TP and SL as separate Trigger PositionRequest accounts
-    if (stopLoss)   await placeTriggerRequest(positionPDA, positionRequestPDA, 'sl', stopLoss,   side, asset, custody, collateralCustody, owner);
-    if (takeProfit) await placeTriggerRequest(positionPDA, positionRequestPDA, 'tp', takeProfit, side, asset, custody, collateralCustody, owner);
-
-    return positionRequestPDA.toBase58();
-  } catch (err) {
-    throw new Error(`[${NETWORK}] openPositionRequest failed: ${err.message}`);
-  }
+  const { transaction, orderId } = await resp.json();
+  const sig = await signAndSend(transaction);
+  log(`[${NETWORK}] Order placed: ${orderId} | tx: ${sig}`);
+  return orderId;
 }
 
 // ── Place TP/SL Trigger requests ──────────────────────────────────
