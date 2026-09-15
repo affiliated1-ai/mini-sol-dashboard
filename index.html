@@ -62,12 +62,8 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 .chart-section{margin-bottom:14px}
 .chart-label{font-size:11px;color:var(--muted); margin-bottom:4px}
 .chart-wrap{position: relative;width:100%}
-.chart-wrap.main{height:420px}
-.chart-wrap.sub{height:160px}
-@media (max-width:700px){
-    .chart-wrap.main{height:340px}
-    .chart-wrap.sub{height:135px}
-}
+.chart-wrap.main{height:280px}
+.chart-wrap.sub{height:88px}
 .tracker{background: var(--surface); border:.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px}
 .tracker-header {display: flex; align-items:center; justify-content: space-between;margin-bottom:10px; flex-wrap:wrap;gap:8px}
 .tracker-title{font-size:13px;font-weight:500}
@@ -552,13 +548,17 @@ function getAppConfig() {
         SOLANA_RPC_URL: 'https://api.devnet.solana.com',
         BOT_URL: 'http://localhost:3001',
         BINANCE_API_URL: 'https://data-api.binance.vision',
+        TELEGRAM_TOKEN: '',
+        TELEGRAM_CHAT_ID: ''
     };
     const loaded = window.DASHBOARD_CONFIG || {};
     return {
         network: localStorage.getItem('sol_network') || loaded.NETWORK || defaults.NETWORK,
         rpcUrl: localStorage.getItem('sol_rpc_url') || loaded.SOLANA_RPC_URL || defaults.SOLANA_RPC_URL,
-        botUrl: (localStorage.getItem('sol_bot_url') || loaded.BOT_URL || defaults.BOT_URL).replace(/\/+$/, ''),
+        botUrl: localStorage.getItem('sol_bot_url') || loaded.BOT_URL || defaults.BOT_URL,
         binanceApi: localStorage.getItem('sol_binance_api') || loaded.BINANCE_API_URL || defaults.BINANCE_API_URL,
+        tgToken: localStorage.getItem('sol_tg_token') || loaded.TELEGRAM_TOKEN || defaults.TELEGRAM_TOKEN,
+        tgChatId: localStorage.getItem('sol_tg_chat_id') || loaded.TELEGRAM_CHAT_ID || defaults.TELEGRAM_CHAT_ID
     };
 }
 
@@ -808,14 +808,14 @@ function updateBotUI() {
     const tgCfg = getTelegramConfig();
     const tgBtn = document.getElementById('tg-btn');
     if (tgBtn) {
-        if (tgCfg.server) {
+        if (tgCfg.token && tgCfg.chatId) {
             tgBtn.className = 'bot-btn active';
             tgBtn.textContent = '✈️ TG: On';
-            tgBtn.title = 'Telegram is configured on the private backend. Click to send a test alert.';
+            tgBtn.title = `Telegram connected (Chat: ${tgCfg.chatId}). Click to test or edit.`;
         } else {
             tgBtn.className = 'bot-btn';
-            tgBtn.textContent = '✈️ TG: Test';
-            tgBtn.title = 'Send a Telegram test alert through the backend.';
+            tgBtn.textContent = '✈️ TG: Set';
+            tgBtn.title = 'Telegram not configured. Click to enter Bot Token & Chat ID.';
         }
     }
 
@@ -880,7 +880,9 @@ async function sendSignalToBot(signal, price, atrVal, entryPrice, entryOffset, s
         timeframe: currentTF,
         reason: sigObj?.reason || (signal === 'green' ? 'reversal_hook' : 'standby'),
         regime: sigObj?.regime || 'RANGE_BOUND_SUPPORT',
-        entryOffset: entryOffset,
+        orderType: 'LIMIT_OR_MARKET',
+        ttlMinutes: 15,
+        entryOffset: entryOffset || 0.08,
         tp1: sigObj?.tp1 || 0.35,
         tp2: sigObj?.tp2 || (sigObj?.regime === 'RANGE_BOUND_SUPPORT' ? 0.55 : 0.75),
         slCoeff: sigObj?.slCoeff || 1.5,
@@ -1077,11 +1079,10 @@ async function runLiveBacktest() {
             const htfSignal = htf_map[hr_floor] || 'red';
             
             let regime = "RANGE_BOUND_SUPPORT";
-            const pctDistVWMA = cur_vwma ? (Math.abs(price - cur_vwma) / cur_vwma) * 100 : 0;
             
             if (htfSignal === 'red' && price < cur_vwma && cur_adx > 35) {
                 regime = "FLASH_CRASH";
-            } else if (pctDistVWMA <= 0.3 || cur_adx < 20) {
+            } else if (cur_adx < 20) {
                 regime = "MARKET_CHOP";
             } else if (htfSignal === 'green' && price > cur_vwma && cur_adx > 45) {
                 regime = "BULL_TREND_DRIFT";
@@ -1089,14 +1090,8 @@ async function runLiveBacktest() {
                 regime = "RANGE_BOUND_SUPPORT";
             }
 
-            // OPTIMIZED DB PARAMETERS (CHANGE 1, 2, 3, 4, 5)
-            // 1. Fee-Neutral TP1 widened to 0.35
-            // 2. Base SL tightened to 1.5x ATR
-            // 3. Dynamic pullback limit = 0.25 * ATR (clamped 0.05 to 0.20)
-            // 4. Symmetrical Sit-Outs in Flash Crash & Market Chop
-            // 5. 50x Base Leverage with 50% compounding
-            const dynamicOffset = Math.max(0.05, Math.min(cur_atr * 0.25, 0.20));
-            const entryOffset = dynamicOffset;
+            // Calibrated 8¢ Limit offset with 15m TTL
+            const entryOffset = 0.08;
             let tp1 = 0.35;
             let tp2 = 0.75;
             let slCoeff = 1.5;
@@ -1110,17 +1105,11 @@ async function runLiveBacktest() {
 
             let rawSignal = 'yellow';
             if (regime !== "MARKET_CHOP" && regime !== "FLASH_CRASH") {
-                const cciSub = cci.slice(Math.max(0, i-3), i+1);
-                const anyOversold = cciSub.some(val => val !== null && val <= -100);
                 const cciBullish = cci[i] > cci[i-1];
                 const fishBullish = fisher[i] > fisher[i-1];
-                const isBullCandle = closes[i] > opens[i];
-                
-                const cciDiv = detectDivergence(closes.slice(0, i+1), cci.slice(0, i+1));
-                const fishDiv = detectDivergence(closes.slice(0, i+1), fisher.slice(0, i+1));
-                const bullDiv = cciDiv === 'bullish' || fishDiv === 'bullish';
+                const isBullCandle = closes[i] > opens[i] || ((Math.min(opens[i], closes[i]) - lows[i]) >= 1.2 * Math.max(0.01, Math.abs(closes[i] - opens[i])));
 
-                if ((anyOversold || bullDiv) && cciBullish && fishBullish && isBullCandle) {
+                if (cciBullish && fishBullish && isBullCandle) {
                     rawSignal = 'green';
                 }
             }
@@ -1398,8 +1387,10 @@ function calcADX(highs, lows, closes, period=14) {
     });
 
     const adxRaw=smooth(dx,period);
-    const pad = highs.length-adxRaw.length;
-    return Array(pad).fill(null).concat(adxRaw);
+    // Properly normalize Wilder ADX by dividing cumulative sum by period (0-100 scale)
+    const adxScaled=adxRaw.map(v => Math.min(100, Math.max(0, v / period)));
+    const pad = highs.length-adxScaled.length;
+    return Array(pad).fill(null).concat(adxScaled);
 }
 
 function isFisherCrossUp(fisher, fisherSig) {
@@ -1415,10 +1406,25 @@ function isGoodSession() {
     return (h>=13&&h<21) || (h>=0&&h<4);
 }
 
-function isBullishCandle(opens, closes) {
+function isBullishCandle(opens, closes, highs, lows) {
     if (opens.length < 2) return false;
     const i = opens.length - 2;
-    return closes[i] > opens[i];
+    const op = opens[i];
+    const cl = closes[i];
+    if (cl > op) return true; // Standard green candle close
+
+    // Absorption pin-bar / hammer support:
+    // Even if close <= open, if the lower wick is at least 1.2x candle body with 15¢+ depth,
+    // strong buyer absorption is confirmed at support.
+    if (highs && lows && highs.length > i && lows.length > i) {
+        const lo = lows[i];
+        const body = Math.max(0.01, Math.abs(cl - op));
+        const lowerWick = Math.min(op, cl) - lo;
+        if (lowerWick >= 1.2 * body && lowerWick >= 0.15) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function detectDivergence(prices, indicator, lookback=5) {
@@ -1468,13 +1474,12 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
 
     // 1. Dynamic Regime Detection
     let regime = "RANGE_BOUND_SUPPORT";
-    const pctDistVWMA = vwma ? (Math.abs(price - vwma) / vwma) * 100 : 0;
     const actualADX = curADX !== undefined && curADX !== null ? curADX : 30;
     const currentATR = curATR || 0.35;
 
     if (htfSignal === 'red' && price < vwma && actualADX > 35) {
         regime = "FLASH_CRASH";
-    } else if (pctDistVWMA <= 0.3 || actualADX < 20) {
+    } else if (actualADX < 20) {
         regime = "MARKET_CHOP";
     } else if (htfSignal === 'green' && price > vwma && actualADX > 45) {
         regime = "BULL_TREND_DRIFT";
@@ -1482,12 +1487,8 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
         regime = "RANGE_BOUND_SUPPORT";
     }
 
-    // 2. Dynamic Pullback Limit Entry: 0.25 * ATR, clamped to [5¢, 20¢]
-    // In Range Bound: 0.30 * ATR clamped to [8¢, 22¢] for deeper support wick fill
-    const dynamicOffset = regime === "RANGE_BOUND_SUPPORT"
-        ? Math.max(0.08, Math.min(currentATR * 0.30, 0.22))
-        : Math.max(0.05, Math.min(currentATR * 0.25, 0.20));
-    let entryOffset = dynamicOffset;
+    // 2. Calibrated Limit Entry: Close - 8¢ (or Market execution with 15m TTL)
+    let entryOffset = 0.08;
     
     // 3. Fee-Neutral TP1 widened to 0.35 (+3.5% to +4.5% net margin yield)
     let tp1 = 0.35;
@@ -1507,6 +1508,9 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
         // Strict 100% Cash Symmetrical Sit-Out (Change 4)
         recommendedMargin = 0.00;
         slCoeff = 1.5;
+    } else if (regime === "RANGE_BOUND_SUPPORT") {
+        tp2 = 0.55; // 55¢ range target
+        recommendedMargin = 120.00;
     } else if (regime === "BULL_TREND_DRIFT") {
         tp2 = 1.10; // Extended runner for bull drift
         recommendedMargin = 120.00;
@@ -1517,26 +1521,17 @@ function calcSignal(cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma, sma50,
     const isBullishClose = bullishCandle;
 
     const bullDiv = cciDiv==='bullish' || fishDiv==='bullish';
-    const cciSub = cciArr.slice(-4);
-    const anyOversold = cciSub.some(val => val !== null && val <= -100);
 
     let isLongTrigger = false;
     let reason = 'insufficient_alignment';
 
-    // Symmetrical Sit-Out enforcement: Take ZERO trades in Chop or Flash Crash
+    // Symmetrical Sit-Out enforcement: Take ZERO trades in Chop (ADX < 20) or Flash Crash (ADX > 35 + Red HTF)
     if (regime !== "MARKET_CHOP" && regime !== "FLASH_CRASH") {
-        // Range Bound Filter: Prevent entering near channel resistance (must be <= VWMA or deep oversold CCI <= -110)
-        const isRangeBound = regime === "RANGE_BOUND_SUPPORT";
-        const passesRangeFilter = !isRangeBound || (price <= vwma || (cciArr[cciArr.length - 1] !== null && cciArr[cciArr.length - 1] <= -110));
-
-        if (passesRangeFilter) {
-            if (anyOversold && cciBullish && fishBullish && isBullishClose) {
-                isLongTrigger = true;
-                reason = 'oversold_hook_long';
-            } else if (bullDiv && cciBullish && fishBullish && isBullishClose) {
-                isLongTrigger = true;
-                reason = 'bullish_divergence_reversal';
-            }
+        // Sub-VWMA Floor and Deep Oversold removed:
+        // Triggers as soon as CCI & Fisher hook up together with candle / pin-bar confirmation
+        if (cciBullish && fishBullish && isBullishClose) {
+            isLongTrigger = true;
+            reason = bullDiv ? 'bullish_divergence_reversal' : 'reversal_hook_long';
         }
     }
 
@@ -1689,13 +1684,12 @@ function applySignal(sigObj, cciArr, cciUp, fishArr, fishUp, tenkUp, price, vwma
             lbl.textContent = labelText;
             
             const recommends = `Active Regime: ${sigObj.regime.replace(/_/g, ' ')} · Sizing: ${marginSizeStr}`;
-            const dipMultStr = sigObj.regime === 'RANGE_BOUND_SUPPORT' ? '0.30×ATR deep wick' : '0.25×ATR dip';
             const runnerFloorNote = sigObj.regime === 'RANGE_BOUND_SUPPORT' ? ' (+15¢ Runner Floor)' : '';
-            sub.textContent = recommends + `. Place Limit Buy Order ${Math.round(entryOffset*100)}¢ below Close at $` + fmt(price - entryOffset, 2) + ` (${dipMultStr}). Targets: TP1 +${Math.round(tp1*100)}¢, TP2 +${Math.round(tp2*100)}¢${runnerFloorNote}, Stop Loss: Trailing ${slCoeff}x ATR.`;
+            sub.textContent = recommends + `. Place Limit Buy Order ${Math.round(entryOffset*100)}¢ below Close at $` + fmt(price - entryOffset, 2) + ` (or Market with 15m TTL). Targets: TP1 +${Math.round(tp1*100)}¢, TP2 +${Math.round(tp2*100)}¢${runnerFloorNote}, Stop Loss: Trailing ${slCoeff}x ATR.`;
         } else {
             lbl.textContent = '🟨 YELLOW Standby Mode (100% Cash)';
             if (sigObj.regime === 'MARKET_CHOP') {
-                sub.textContent = 'Price consolidating within 0.3% of VWMA (Market Chop). Symmetrical sit-out in 100% Cash to eliminate fee drag.';
+                sub.textContent = 'ADX < 20 (Market Chop). Symmetrical sit-out in 100% Cash to eliminate low-volatility churn.';
             } else if (sigObj.regime === 'FLASH_CRASH') {
                 sub.textContent = 'Liquidation cascade waterfall active (Flash Crash). Symmetrical sit-out in 100% Cash to preserve principal.';
             } else {
@@ -1847,7 +1841,7 @@ async function load() {
             }
         }
 
-        const bullishCandle=isBullishCandle(opens, closes);
+        const bullishCandle=isBullishCandle(opens, closes, highs, lows);
         const cciDiv=detectDivergence(cC, cci);
         const fishDiv=detectDivergence(cC, fisher);
         const cciAccel=isMomentumAccelerating(cci);
@@ -1856,7 +1850,7 @@ async function load() {
         const candleEl = document.getElementById('candle-arr');
         if (candleEl) {
             document.getElementById('candle-val').textContent = bullishCandle ? 'Bullish' : 'Bearish';
-            candleEl.textContent = bullishCandle ? 'Close > Open' : 'Close < Open';
+            candleEl.textContent = bullishCandle ? (closes[closes.length-2] > opens[opens.length-2] ? 'Close > Open' : 'Pin-bar Hammer') : 'Close < Open';
             candleEl.className = 'ind-arrow ' + (bullishCandle?'arr-up':'arr-dn');
         }
 
@@ -1892,6 +1886,12 @@ async function load() {
         const sigObj = calcSignal(cci, cciUp, fisher, fishUp, tenkUp, cur, curVWMA, curSMA50, volOK, atrOK, adxOK, crossUp, htfSignal, bullishCandle, cciDiv, fishDiv, cciAccel, lastBarTS, curADX, curATR);
         applySignal(sigObj, cci, cciUp, fisher, fishUp, tenkUp, cur, curVWMA, curSMA50, volOK, atrOK, adxOK, crossUp);
         fireAlertIfChanged(sigObj.signal, cur, cciUp, fishUp, tenkUp, sigObj);
+
+        if (sigObj.signal === 'green') {
+            consecutiveGreen = Math.min(2, (consecutiveGreen || 0) + 1);
+        } else {
+            consecutiveGreen = 0;
+        }
 
         const buyBlock = document.getElementById('buy-signal-block');
         const buyText = document.getElementById('buy-signal-text');
@@ -1955,9 +1955,9 @@ async function load() {
         mkCandleChart('priceChart', ohlcData, tenkanXY, vwmaXY, sma50XY);
 
         mkChart('cciChart', labels, [
-            {label:'+100',data:labels.map(()=>100),borderColor:'rgba(137,135,129,0.4)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[3,3],_referenceLine:true},
-            {label:'0',data:labels.map(()=>0),borderColor:'rgba(137,135,129,0.2)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[2,2],_referenceLine:true},
-            {label:'-100',data:labels.map(()=>-100),borderColor:'rgba(137,135,129,0.4)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[3,3],_referenceLine:true},
+            {label:'+100',data:labels.map(()=>100),borderColor:'rgba(137,135,129,0.4)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[3,3]},
+            {label:'0',data:labels.map(()=>0),borderColor:'rgba(137,135,129,0.2)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[2,2]},
+            {label:'-100',data:labels.map(()=>-100),borderColor:'rgba(137,135,129,0.4)',backgroundColor:'transparent',fill:false,tension:0,pointRadius:0,borderWidth:1,borderDash:[3,3]},
             {label:'CCI',data:cci, borderColor:cciUp?'#16a34a':'#dc2626',backgroundColor:cciUp?'rgba(22,163,74,0.07)':'rgba(220,38,38,0.07)',fill:false,tension:0.3,pointRadius:0,borderWidth:1.5}
         ],{
             ticks: {
@@ -1977,12 +1977,12 @@ async function load() {
         mkChart('fishChart', labels, [
             {label:'Fisher',data:fisher,borderColor:'#2a78d6',backgroundColor:'rgba(42,120,214,0.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:1.5},
             {label:'Signal',data:fishSig,borderColor:'#dc2626',backgroundColor:'transparent',fill:false,tension:0.3,pointRadius:0,borderWidth:1.5}
-        ],{ticks:{callback:v=>Number(v).toFixed(2)},dynamic:{padding:0.12,minimumSpan:2.4}});
+        ],{ticks:{callback:v=>Number(v).toFixed(2)}});
 
         const atrColor = atrOK ? '#22c55e' : '#ef4444';
         mkChart('atrChart', labels, [
             {label:'ATR',data:atr,borderColor:atrColor,backgroundColor:atrOK?'rgba(34,197,94,0.07)':'rgba(239,68,68,0.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:1.5}
-        ],{ticks:{callback:v=>fmt(v,3)},dynamic:{padding:0.12,minimumSpan:0.01}});
+        ],{ticks:{callback:v=>fmt(v,3)}});
 
         document.getElementById('updated').textContent='Updated '+new Date().toLocaleTimeString() + ' | Binance Live (30s)';
     } catch(e) {
@@ -2147,27 +2147,61 @@ function showToast(title, body) {
 }
 
 function getTelegramConfig() {
-    return { server: true };
+    return {
+        token: localStorage.getItem('sol_tg_token') || window.DASHBOARD_CONFIG?.TELEGRAM_TOKEN || '',
+        chatId: localStorage.getItem('sol_tg_chat_id') || window.DASHBOARD_CONFIG?.TELEGRAM_CHAT_ID || ''
+    };
 }
 
 function promptTelegramConfig() {
-    testTelegramAlert();
+    const cur = getTelegramConfig();
+    const token = prompt('Enter Telegram Bot Token (from @BotFather):', cur.token);
+    if (token === null) return;
+    const chatId = prompt('Enter Telegram Chat ID (e.g. 123456789 or @channel):', cur.chatId);
+    if (chatId === null) return;
+
+    localStorage.setItem('sol_tg_token', token.trim());
+    localStorage.setItem('sol_tg_chat_id', chatId.trim());
+    updateBotUI();
+
+    if (token.trim() && chatId.trim()) {
+        const testNow = confirm('Telegram credentials saved!\n\nWould you like to send a test ping to your Telegram chat now?');
+        if (testNow) testTelegramAlert();
+    } else {
+        showToast('Telegram Config', 'Credentials cleared.');
+    }
 }
 
 async function testTelegramAlert() {
+    const cfg = getTelegramConfig();
+    if (!cfg.token || !cfg.chatId) {
+        alert('Please enter both Telegram Bot Token and Chat ID first.');
+        promptTelegramConfig();
+        return;
+    }
     showToast('✈️ Telegram', 'Sending test ping to Telegram...');
     try {
-        const res = await fetch(`${getBotUrl()}/telegram/test`, {
+        const title = '🟩 REVERSAL SNIPER TEST';
+        const body = `🎯 <b>SOL/USDT Telegram Alerts Connected!</b>\n` +
+                     `Time: ${new Date().toLocaleTimeString()}\n` +
+                     `Status: Active & ready for live sniper signals.`;
+        const res = await fetch(`https://api.telegram.org/bot${cfg.token}/sendMessage`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: cfg.chatId,
+                text: `<b>${title}</b>\n${body}`,
+                parse_mode: 'HTML'
+            })
         });
         const data = await res.json();
         if (data.ok) {
             showToast('✅ Telegram Success', 'Test alert received in Telegram!');
             alert('✅ Success! Test message received in your Telegram.');
         } else {
-            showToast('❌ Telegram Error', data.error || 'Unknown error');
-            alert(`Telegram backend error: ${data.error || 'Unknown error'}\n\nCheck TELEGRAM_TOKEN and TELEGRAM_CHAT_ID in Render environment variables.`);
+            const desc = data.description || 'Unknown error';
+            showToast('❌ Telegram Error', desc);
+            alert(`Telegram API Error (HTTP ${data.error_code}): ${desc}\n\nTroubleshooting:\n• If "chat not found": You must open your bot in Telegram and click START (/start) first.\n• If "Unauthorized": Verify your Bot Token from @BotFather.`);
         }
     } catch(err) {
         showToast('❌ Network Error', err.message);
@@ -2176,16 +2210,26 @@ async function testTelegramAlert() {
 }
 
 async function sendTelegram(title, body, signal) {
+    const cfg = getTelegramConfig();
+    if (!cfg.token || !cfg.chatId) {
+        console.warn('[Telegram] No Bot Token or Chat ID configured. Click "✈️ Telegram" to setup.');
+        return;
+    }
+    const text = `<b>${title}</b>\n${body}`;
     try {
-        const res = await fetch(`${getBotUrl()}/telegram`, {
+        const res = await fetch(`https://api.telegram.org/bot${cfg.token}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, body })
+            body: JSON.stringify({
+                chat_id: cfg.chatId,
+                text,
+                parse_mode: 'HTML'
+            })
         });
         const data = await res.json();
         if (!data.ok) {
-            console.error('[Telegram Error]', data.error);
-            showToast('Telegram Error', data.error || 'Unknown error');
+            console.error('[Telegram Error]', data.error_code, data.description);
+            showToast('Telegram Error', `${data.description} (${data.error_code})`);
         } else {
             console.log('[Telegram Alert Sent]', title);
         }
@@ -2396,38 +2440,6 @@ const gridColor = () => isDark() ? '#2c2c2a' : '#e1e0d9';
 const tickColor = () => '#898781';
 
 const zoomState = {};
-function visibleDataRange(chart, includeDataset) {
-    const xScale = chart.scales.x;
-    const minX = xScale && Number.isFinite(xScale.min) ? xScale.min : -Infinity;
-    const maxX = xScale && Number.isFinite(xScale.max) ? xScale.max : Infinity;
-    const values = [];
-    chart.data.datasets.forEach(dataset => {
-        if (includeDataset && !includeDataset(dataset)) return;
-        (dataset.data || []).forEach((point, index) => {
-            const pointX = point && typeof point === 'object' ? point.x : index;
-            if (pointX != null && (pointX < minX || pointX > maxX)) return;
-            if (point && typeof point === 'object' && point.h != null && point.l != null) {
-                values.push(Number(point.h), Number(point.l));
-            } else {
-                const value = point && typeof point === 'object' ? point.y : point;
-                if (value != null) values.push(Number(value));
-            }
-        });
-    });
-    return values.filter(Number.isFinite);
-}
-
-function applyDynamicYRange(scale, chart, paddingRatio, minimumSpan = 0) {
-    const values = visibleDataRange(chart, dataset => !dataset._referenceLine);
-    if (!values.length) return;
-    const dataMin = Math.min(...values);
-    const dataMax = Math.max(...values);
-    const span = Math.max(dataMax - dataMin, minimumSpan);
-    const padding = Math.max(span * paddingRatio, minimumSpan * paddingRatio);
-    scale.min = dataMin - padding;
-    scale.max = dataMax + padding;
-}
-
 function saveZoom(id){
     const c=charts[id]; if(!c)return;
     try{const x=c.scales.x; if(x&&x.min!=null)zoomState[id]={min:x.min,max:x.max};}catch(e){}
@@ -2519,10 +2531,6 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
                             return `${ctx.dataset.label}: $${fmt(ctx.parsed.y,2)}`;
                         }
                     }
-                },
-                zoom: {
-                    pan: { enabled: true, mode: 'x' },
-                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
                 }
             },
             scales: {
@@ -2536,8 +2544,7 @@ function mkCandleChart(id, ohlcData, tenkanXY, vwmaXY, sma50XY) {
                 y: {
                     grid: { color: gridColor() },
                     ticks: { color: tickColor(), font: { size: 10 }, callback: v => '$'+fmt(v,0) },
-                    border: { display: false },
-                    afterDataLimits: scale => applyDynamicYRange(scale, scale.chart, 0.08, 0.10)
+                    border: { display: false }
                 }
             }
         }
@@ -2557,11 +2564,7 @@ function mkChart(id, labels, datasets, yExtra={}){
             animation: { duration: 0 },
             plugins: {
                 legend: { display: false },
-                tooltip: { mode: 'index', intersect: false },
-                zoom: {
-                    pan: { enabled: true, mode: 'x' },
-                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
-                }
+                tooltip: { mode: 'index', intersect: false }
             },
             scales: {
                 x: {
@@ -2573,8 +2576,7 @@ function mkChart(id, labels, datasets, yExtra={}){
                     grid: { color: gridColor() },
                     ticks: { color: tickColor(), font: { size: 10 }, ...(yExtra.ticks||{}) },
                     border: { display: false },
-                    ...(yExtra.scale||{}),
-                    ...(yExtra.dynamic ? { afterDataLimits: scale => applyDynamicYRange(scale, scale.chart, yExtra.dynamic.padding, yExtra.dynamic.minimumSpan) } : {})
+                    ...(yExtra.scale||{})
                 }
             }
         }
