@@ -1,51 +1,44 @@
 /**
- * ═══════════════════════════════════════════════════════════════════
- *  Jupiter Perpetuals — Anchor-Based On-Chain Integration
+ * ===================================================================
+ *  Jupiter Perpetuals - Anchor On-Chain Production Integration
  *
  *  Built against the official Jupiter Perps on-chain program:
  *    Program ID: PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu
  *
  *  Reference:
- *    https://developers.jup.ag/docs/perps
+ *    https://jup.ag/docs/perps/overview
  *    https://github.com/julianfssen/jupiter-perps-anchor-idl-parsing
- *    https://developers.jup.ag/docs/perps/position-request-account
- *    https://developers.jup.ag/docs/perps/custody-account
- *
- *  Architecture:
- *    - Uses @coral-xyz/anchor to load the Jupiter Perps IDL
- *    - Derives all PDAs (Position, PositionRequest, Custody) deterministically
- *    - Builds openPositionRequest / closePositionRequest instructions directly
- *    - Monitors on-chain PositionRequest accounts for fill/execution (no REST polling)
- *    - TP/SL stored on-chain as Trigger PositionRequest accounts
- *
- *  Setup:
- *    1. npm install @coral-xyz/anchor @solana/spl-token @pythnetwork/client
- *    2. Download IDL: https://solscan.io/account/PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu#programIdl
- *       Save as: ./idl/jupiter-perpetuals.json
- *    3. Set KEYPAIR_PATH and SOLANA_RPC in .env
- *    4. Set DEVNET=true for devnet testing
- *
- *  ⚠️  DEVNET NOTE:
- *    Jupiter Perps devnet has limited markets (SOL only) and the
- *    program ID may differ. Check https://jup.ag/devnet for current
- *    devnet deployment details before running.
- * ═══════════════════════════════════════════════════════════════════
+ *    https://jup.ag/docs/perps/position-account
+ *    https://jup.ag/docs/perps/position-request-account
+ * ===================================================================
  */
 'use strict';
 
 require('dotenv').config();
 
-const anchor        = require('@coral-xyz/anchor');
-const { Connection, Keypair, PublicKey, SystemProgram,
-        SYSVAR_RENT_PUBKEY, Transaction }  = require('@solana/web3.js');
-const { TOKEN_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID,
-        getAssociatedTokenAddress }        = require('@solana/spl-token');
+const anchor = require('@coral-xyz/anchor');
+const { 
+  Connection, 
+  Keypair, 
+  PublicKey, 
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY, 
+  Transaction,
+  ComputeBudgetProgram 
+} = require('@solana/web3.js');
+const { 
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  NATIVE_MINT,
+  getAssociatedTokenAddress,
+  createAssociatedTokenAccountIdempotentInstruction,
+  createSyncNativeInstruction
+} = require('@solana/spl-token');
 const fs   = require('fs');
 const path = require('path');
 const { log } = require('./utils');
 
-// ── Network config ────────────────────────────────────────────────
+// -- Network config ------------------------------------------------
 const IS_DEVNET = process.env.DEVNET === 'true';
 const NETWORK   = IS_DEVNET ? 'DEVNET' : 'MAINNET';
 
@@ -56,38 +49,17 @@ const RPC_URL = process.env.SOLANA_RPC ||
 const KEYPAIR_PATH = process.env.KEYPAIR_PATH ||
   path.join(__dirname, IS_DEVNET ? 'wallet-devnet.json' : 'wallet.json');
 
-// ── Program IDs ───────────────────────────────────────────────────
-// Mainnet: verified from https://solscan.io/account/PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu
-// Devnet:  check https://jup.ag/devnet — may differ or be unavailable
+// -- Program IDs ---------------------------------------------------
 const PERP_PROGRAM_ID = new PublicKey(
   IS_DEVNET
     ? process.env.DEVNET_PERP_PROGRAM_ID || 'PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu'
     : 'PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu'
 );
 
-// ── Jupiter API base ──────────────────────────────────────────────
-const API = IS_DEVNET
-  ? 'https://perp.jup.ag/v1/devnet'
-  : 'https://perp.jup.ag/v1';
+// -- JLP Pool (mainnet) --------------------------------------------
+const JLP_POOL = new PublicKey('5BUwFW4nRbftYTDMbgxykoFWqWHPzahFSNAaaaJtVKsq');
 
-// Market addresses used by the Jupiter Perps order API.
-const MARKETS_MAINNET = {
-  SOL: 'GVXRSBjFk6e6J3NbVPXohDJetcTjaeeuykUpbQF8UoMU',
-  BTC: '4bM22ixZAhpuHtFvT4VhEfbDaGoGqiEyTtLFoQxdCGxe',
-  ETH: '87uHZqfRkBfPKRgS6gV94UFn4KqUBVTSHb6HuNBPEXHW',
-  BNB: 'DcwFiGMwdagfNbHHBFRHKLDJSJnhSPb1Mzo8TgpMELr4',
-  XRP: '6TdKK8mFg7pfX4xRXMPAXTYm2KbWHRQG9DPJjHHGHCe',
-};
-
-// Devnet currently supports SOL only.
-const MARKETS_DEVNET = {
-  SOL: 'E4v1BBgoso9s64TQvmyownAVJbhbEPGyz27zXFnzCn4i',
-};
-
-const MARKETS = IS_DEVNET ? MARKETS_DEVNET : MARKETS_MAINNET;
-
-// ── Custody accounts (mainnet) ────────────────────────────────────
-// Source: https://developers.jup.ag/docs/perps/custody-account
+// -- Custody accounts (mainnet) ------------------------------------
 const CUSTODY_ACCOUNTS = {
   SOL:  new PublicKey('7xS2gz2bTp3fwCC7knJvUWTEU9Tycczu6VhJYKgi1wdz'),
   ETH:  new PublicKey('AQCGyheWPLeo6Qp9WpYS9m3Qj479t7R636N9ey1rEjEn'),
@@ -96,18 +68,15 @@ const CUSTODY_ACCOUNTS = {
   USDT: new PublicKey('4vkNeXiYEUizLdrpdPS1eC2mccyM4NUPRtERrk6ZETkk'),
 };
 
-// ── Token mint addresses (mainnet) ────────────────────────────────
+// -- Token mint addresses ------------------------------------------
 const TOKEN_MINTS = {
-  SOL:  new PublicKey('So11111111111111111111111111111111111111112'),
+  SOL:  new PublicKey('So11111111111111111111111111111111111111112'), // WSOL
   ETH:  new PublicKey('7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs'),
   BTC:  new PublicKey('9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E'),
   USDC: new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'),
   USDT: new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'),
 };
 
-// ── Collateral mint for position side ────────────────────────────
-// Long  → collateral in the position token (e.g. SOL for SOL long)
-// Short → collateral in USDC
 function getCollateralMint(asset, side) {
   return side === 'Long' ? TOKEN_MINTS[asset] : TOKEN_MINTS.USDC;
 }
@@ -116,7 +85,7 @@ function getCollateralCustody(asset, side) {
   return side === 'Long' ? CUSTODY_ACCOUNTS[asset] : CUSTODY_ACCOUNTS.USDC;
 }
 
-// ── Wallet ────────────────────────────────────────────────────────
+// -- Wallet --------------------------------------------------------
 let _kp = null;
 function getKeypair() {
   if (_kp) return _kp;
@@ -131,11 +100,11 @@ function getKeypair() {
   }
   const raw = JSON.parse(fs.readFileSync(KEYPAIR_PATH, 'utf8'));
   _kp = Keypair.fromSecretKey(Uint8Array.from(raw));
-  log(`[${NETWORK}] Wallet: ${_kp.publicKey.toBase58().slice(0,10)}…`);
+  log(`[${NETWORK}] Wallet: ${_kp.publicKey.toBase58().slice(0, 10)}...`);
   return _kp;
 }
 
-// ── Anchor provider + program ─────────────────────────────────────
+// -- Anchor provider + program -------------------------------------
 const connection = new Connection(RPC_URL, 'confirmed');
 let _program = null;
 
@@ -148,7 +117,7 @@ function getProgram() {
       `Jupiter Perps IDL not found at ${idlPath}\n` +
       'Download it from:\n' +
       '  https://solscan.io/account/PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu#programIdl\n' +
-      'Save as: sol-bot/idl/jupiter-perpetuals.json'
+      'Save as: ./idl/jupiter-perpetuals.json'
     );
   }
 
@@ -165,40 +134,27 @@ function getProgram() {
   return _program;
 }
 
-async function signAndSend(txBase64) {
-  const kp = getKeypair();
-  const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
-  tx.partialSign(kp);
-  const sig = await connection.sendRawTransaction(tx.serialize(), {
-    skipPreflight: false,
-    maxRetries: 3,
-  });
-  await connection.confirmTransaction(sig, 'confirmed');
-  return sig;
-}
-
-// ── PDA derivation ────────────────────────────────────────────────
+// -- PDA derivation ------------------------------------------------
 /**
- * Derives the Position PDA for a given owner + pool + custody + side.
- * Source: https://github.com/julianfssen/jupiter-perps-anchor-idl-parsing
+ * Derives the Position PDA using Jupiter's exact on-chain seeds:
+ * [b"position", owner, pool, custody, collateral_custody]
  */
-function derivePositionPDA(owner, pool, custody, side) {
+function derivePositionPDA(owner, pool, custody, collateralCustody) {
   return PublicKey.findProgramAddressSync(
     [
       Buffer.from('position'),
       owner.toBuffer(),
       pool.toBuffer(),
       custody.toBuffer(),
-      Buffer.from(side === 'Long' ? [0] : [1]),
+      collateralCustody.toBuffer(),
     ],
     PERP_PROGRAM_ID
   );
 }
 
 /**
- * Derives the PositionRequest PDA.
- * Each request is unique via a u64 counter seed.
- * Source: https://developers.jup.ag/docs/perps/position-request-account
+ * Derives the PositionRequest PDA:
+ * [b"position_request", position, counter (u64 LE)]
  */
 function derivePositionRequestPDA(positionPubkey, counter) {
   const counterBuf = Buffer.alloc(8);
@@ -213,90 +169,152 @@ function derivePositionRequestPDA(positionPubkey, counter) {
   );
 }
 
-// ── Open position (market order) ──────────────────────────────────
+// -- Open Position (Real Anchor On-Chain Flow) -----------------------
 /**
- * Builds and sends an openPositionRequest instruction.
- *
- * Jupiter Perps uses a two-step flow:
- *   1. Trader sends openPositionRequest tx → creates PositionRequest account
- *   2. Jupiter keeper bot reads the PositionRequest and executes it on-chain
- *
- * The PositionRequest account is the "limit order" equivalent —
- * it sits on-chain until the keeper processes it (usually <1 second).
- *
- * @param {object} p
- * @param {string} p.asset          'SOL' | 'ETH' | 'BTC'
- * @param {string} p.side           'Long' | 'Short'
- * @param {number} p.marginUSDC     Collateral in USDC (e.g. 25.00)
- * @param {number} p.limitPrice     Max acceptable price (slippage bound)
- * @param {number} p.leverage       Leverage multiplier (1–500)
- * @param {number} p.stopLoss       Stop loss price (creates Trigger PositionRequest)
- * @param {number} p.takeProfit     Take profit price (creates Trigger PositionRequest)
- * @returns {string} positionRequestPubkey (used to monitor execution)
+ * Submits an on-chain openPositionRequest transaction via Anchor.
  */
-async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, stopLoss, takeProfit, leverage }) {
-  const kp  = getKeypair();
-  const mkt = MARKETS[asset];
-  if (!mkt) throw new Error(
-    IS_DEVNET
-      ? `${asset} not available on Jupiter devnet — only SOL is supported. Switch asset or set DEVNET=false.`
-      : `Unknown asset: ${asset}`
+async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, stopLoss, takeProfit }) {
+  const program = getProgram();
+  const kp      = getKeypair();
+  const owner   = kp.publicKey;
+
+  if (!CUSTODY_ACCOUNTS[asset]) {
+    throw new Error(`Unsupported asset: ${asset}`);
+  }
+
+  const custody           = CUSTODY_ACCOUNTS[asset];
+  const collateralCustody = getCollateralCustody(asset, side);
+  const mint              = TOKEN_MINTS[asset];
+  const collateralMint    = getCollateralMint(asset, side);
+
+  // 1. Correct Position PDA
+  const [positionPDA] = derivePositionPDA(owner, JLP_POOL, custody, collateralCustody);
+
+  // 2. PositionRequest PDA
+  const counter = Date.now() % 2**32;
+  const [positionRequestPDA] = derivePositionRequestPDA(positionPDA, counter);
+
+  const positionRequestATA = await getAssociatedTokenAddress(
+    collateralMint,
+    positionRequestPDA,
+    true,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
   );
 
-  log(`[${NETWORK}] placeLimitOrder: ${side} ${asset} @ $${limitPrice} | Margin $${marginUSDC} | ${leverage}×`);
+  const traderCollateralATA = await getAssociatedTokenAddress(
+    collateralMint,
+    owner,
+    false,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
 
-  const resp = await fetch(`${API}/orders`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      wallet:     kp.publicKey.toBase58(),
-      market:     mkt,
-      side:       side.toLowerCase(),
-      collateral: marginUSDC,
-      leverage,
-      price:      limitPrice,
-      stopLoss,
-      takeProfit,
-      orderType:  'limit',
-    }),
-  });
-  if (!resp.ok) throw new Error(`Jupiter API ${resp.status}: ${await resp.text()}`);
+  // Convert to atomic amounts
+  const isSolCollateral = collateralMint.equals(NATIVE_MINT);
+  const collateralDeltaAtomic = isSolCollateral
+    ? Math.round((marginUSDC / limitPrice) * 1e9)  // SOL has 9 decimals
+    : Math.round(marginUSDC * 1e6);                // USDC has 6 decimals
 
-  const { transaction, orderId } = await resp.json();
-  const sig = await signAndSend(transaction);
-  log(`[${NETWORK}] Order placed: ${orderId} | tx: ${sig}`);
-  return orderId;
+  const sizeUsdDeltaAtomic  = Math.round(marginUSDC * leverage * 1e6);
+  const priceSlippageAtomic = Math.round(limitPrice * 1e6);
+
+  log(`[${NETWORK}] placeLimitOrder (Anchor): ${side} ${asset} @ $${limitPrice} | Margin $${marginUSDC} | ${leverage}x`);
+  log(`[${NETWORK}] Position PDA: ${positionPDA.toBase58()}`);
+  log(`[${NETWORK}] Request PDA:  ${positionRequestPDA.toBase58()}`);
+
+  try {
+    const openIx = await program.methods
+      .openPositionRequest({
+        counter:           new anchor.BN(counter),
+        side:              side === 'Long' ? { long: {} } : { short: {} },
+        priceSlippage:     new anchor.BN(priceSlippageAtomic),
+        sizeUsdDelta:      new anchor.BN(sizeUsdDeltaAtomic),
+        collateralDelta:   new anchor.BN(collateralDeltaAtomic),
+        requestType:       { market: {} },
+        jupiterMinimumOut: null,
+      })
+      .accounts({
+        owner,
+        pool:                   JLP_POOL,
+        custody,
+        collateralCustody,
+        mint,
+        collateralMint,
+        position:               positionPDA,
+        positionRequest:        positionRequestPDA,
+        positionRequestAta:     positionRequestATA,
+        ownerTokenAccount:      traderCollateralATA,
+        tokenProgram:           TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram:          SystemProgram.programId,
+        rent:                   SYSVAR_RENT_PUBKEY,
+      })
+      .instruction();
+
+    const tx = new Transaction();
+
+    // Priority Fees (Mandatory on Solana)
+    tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
+    tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }));
+
+    // If using SOL collateral, auto-create WSOL ATA and wrap native SOL
+    if (isSolCollateral) {
+      tx.add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          owner,
+          traderCollateralATA,
+          owner,
+          NATIVE_MINT
+        ),
+        SystemProgram.transfer({
+          fromPubkey: owner,
+          toPubkey: traderCollateralATA,
+          lamports: collateralDeltaAtomic,
+        }),
+        createSyncNativeInstruction(traderCollateralATA)
+      );
+    }
+
+    tx.add(openIx);
+
+    const txSig = await anchor.getProvider().sendAndConfirm(tx, [kp], {
+      commitment: 'confirmed',
+      skipPreflight: false,
+    });
+
+    log(`[${NETWORK}] openPositionRequest confirmed: ${txSig}`);
+
+    // Place TP and SL trigger requests on-chain if specified
+    if (stopLoss)   await placeTriggerRequest(positionPDA, 'sl', stopLoss,   side, asset, custody, collateralCustody, owner);
+    if (takeProfit) await placeTriggerRequest(positionPDA, 'tp', takeProfit, side, asset, custody, collateralCustody, owner);
+
+    return positionRequestPDA.toBase58();
+
+  } catch (err) {
+    if (err.logs) {
+      log(`[SOLANA SIMULATION LOGS]:\n${err.logs.join('\n')}`);
+    }
+    throw new Error(`[${NETWORK}] openPositionRequest failed: ${err.message}`);
+  }
 }
 
-// ── Place TP/SL Trigger requests ──────────────────────────────────
-/**
- * TP and SL are stored on-chain as Trigger PositionRequest accounts.
- * The Jupiter keeper monitors them and executes when price crosses
- * the triggerPrice.
- *
- * Source: https://developers.jup.ag/docs/perps/position-request-account
- * "TP / SL requests are stored onchain via PositionRequest accounts.
- *  They will only be closed when the TP / SL request is triggered."
- */
-async function placeTriggerRequest(positionPDA, _parentRequest, type, triggerPrice, side, asset, custody, collateralCustody, owner) {
+// -- Place TP/SL Trigger requests ----------------------------------
+async function placeTriggerRequest(positionPDA, type, triggerPrice, side, asset, custody, collateralCustody, owner) {
   const program = getProgram();
   const counter = (Date.now() % 2**32) + (type === 'tp' ? 1 : 2);
   const [triggerRequestPDA] = derivePositionRequestPDA(positionPDA, counter);
   const collateralMint = getCollateralMint(asset, side);
-
   const triggerPriceAtomic = Math.round(triggerPrice * 1e6);
 
-  // triggerAboveThreshold logic:
-  // TP Long:  fire when price RISES above triggerPrice → true
-  // SL Long:  fire when price FALLS below triggerPrice → false
-  // TP Short: fire when price FALLS below triggerPrice → false
-  // SL Short: fire when price RISES above triggerPrice → true
   const triggerAboveThreshold =
-    (type === 'tp' && side === 'Long')  ||
+    (type === 'tp' && side === 'Long') ||
     (type === 'sl' && side === 'Short');
 
   const positionRequestATA = await getAssociatedTokenAddress(
-    collateralMint, triggerRequestPDA, true
+    collateralMint, 
+    triggerRequestPDA, 
+    true
   );
 
   try {
@@ -305,98 +323,76 @@ async function placeTriggerRequest(positionPDA, _parentRequest, type, triggerPri
         counter:             new anchor.BN(counter),
         side:                side === 'Long' ? { long: {} } : { short: {} },
         priceSlippage:       new anchor.BN(triggerPriceAtomic),
-        sizeUsdDelta:        new anchor.BN(0),   // entire position
+        sizeUsdDelta:        new anchor.BN(0),
         collateralDelta:     new anchor.BN(0),
-        requestType:         { trigger: {} },    // Trigger = TP/SL
+        requestType:         { trigger: {} },
         jupiterMinimumOut:   null,
         triggerPrice:        new anchor.BN(triggerPriceAtomic),
         triggerAboveThreshold,
-        entirePosition:      true,               // close whole position
+        entirePosition:      true,
       })
       .accounts({
         owner,
-        pool:                JLP_POOL,
+        pool:                   JLP_POOL,
         custody,
         collateralCustody,
-        mint:                TOKEN_MINTS[asset],
+        mint:                   TOKEN_MINTS[asset],
         collateralMint,
-        position:            positionPDA,
-        positionRequest:     triggerRequestPDA,
-        positionRequestAta:  positionRequestATA,
-        ownerTokenAccount:   await getAssociatedTokenAddress(collateralMint, owner, false),
-        tokenProgram:        TOKEN_PROGRAM_ID,
+        position:               positionPDA,
+        positionRequest:        triggerRequestPDA,
+        positionRequestAta:     positionRequestATA,
+        ownerTokenAccount:      await getAssociatedTokenAddress(collateralMint, owner, false),
+        tokenProgram:           TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram:       SystemProgram.programId,
-        rent:                SYSVAR_RENT_PUBKEY,
+        systemProgram:          SystemProgram.programId,
+        rent:                   SYSVAR_RENT_PUBKEY,
       })
       .rpc({ commitment: 'confirmed' });
 
     log(`[${NETWORK}] ${type.toUpperCase()} trigger placed @ $${triggerPrice} | tx: ${txSig}`);
     return triggerRequestPDA.toBase58();
   } catch (err) {
-    // Non-fatal — position is open, just without TP/SL on-chain
     log(`[${NETWORK}] ${type.toUpperCase()} trigger failed (non-fatal): ${err.message}`);
     return null;
   }
 }
 
-// ── Get order / position request status ───────────────────────────
-/**
- * Fetches the PositionRequest account to check if it has been executed.
- * Jupiter keepers execute requests on-chain — no REST polling needed.
- *
- * @param {string} positionRequestPubkey
- * @returns {{ filled: boolean, fillPrice: number|null }}
- */
+// -- Get order / position request status ---------------------------
 async function getOrderStatus(positionRequestPubkey) {
   try {
-    const program = getProgram();
-    const pk      = new PublicKey(positionRequestPubkey);
-
-    // If account no longer exists, the request was executed and closed
+    const pk = new PublicKey(positionRequestPubkey);
     const accountInfo = await connection.getAccountInfo(pk);
+
+    // If account no longer exists, keeper executed & closed the request
     if (!accountInfo) {
-      // Executed and closed by the keeper — position is open
-      log(`[${NETWORK}] PositionRequest ${positionRequestPubkey.slice(0,10)}… executed (account closed)`);
+      log(`[${NETWORK}] PositionRequest executed on-chain (account closed)`);
       return { filled: true, fillPrice: null };
     }
 
-    // Account still exists — parse it
     const program_ = getProgram();
     const decoded  = program_.coder.accounts.decode('PositionRequest', accountInfo.data);
 
     return {
-      filled:    decoded.executed === true,
-      fillPrice: null,  // fill price not stored directly; query Position account
+      filled: decoded.executed === true,
+      fillPrice: null,
     };
   } catch (err) {
     log(`[${NETWORK}] getOrderStatus error: ${err.message}`);
-    // If account fetch fails assume not yet filled
     return { filled: false, fillPrice: null };
   }
 }
 
-// ── Get position status (for SL/TP monitoring) ───────────────────
-/**
- * Fetches the on-chain Position account to check if it's been closed.
- * A Position account that no longer exists = position was closed (SL/TP/liquidation).
- *
- * @param {string} positionRequestPubkey  (we derive position PDA from this)
- * @returns {{ closed: boolean, exitPrice: number|null, closeReason: string }}
- */
-async function getPositionStatus(positionRequestPubkey) {
+// -- Get position status -------------------------------------------
+async function getPositionStatus(positionPubkey) {
   try {
-    // We stored the position PDA as positionId in server.js
-    const positionPDA = new PublicKey(positionRequestPubkey);
-    const accountInfo = await connection.getAccountInfo(positionPDA);
+    const pk = new PublicKey(positionPubkey);
+    const accountInfo = await connection.getAccountInfo(pk);
 
     if (!accountInfo) {
-      // Position account closed = SL/TP/liquidation triggered
-      log(`[${NETWORK}] Position ${positionRequestPubkey.slice(0,10)}… closed (account gone)`);
-      return { closed: true, exitPrice: null, closeReason: 'SL/TP/Liquidation' };
+      log(`[${NETWORK}] Position account closed (SL/TP/Manual Exit)`);
+      return { closed: true, exitPrice: null, closeReason: 'SL/TP/Manual' };
     }
 
-    // Still open
     return { closed: false, exitPrice: null, closeReason: null };
   } catch (err) {
     log(`[${NETWORK}] getPositionStatus error: ${err.message}`);
@@ -404,34 +400,27 @@ async function getPositionStatus(positionRequestPubkey) {
   }
 }
 
-// ── Cancel unfilled position request ─────────────────────────────
-/**
- * Sends a cancelPositionRequest instruction to cancel a pending request.
- * Only works if the keeper hasn't executed it yet.
- *
- * @param {string} positionRequestPubkey
- */
+// -- Cancel unfilled position request -----------------------------
 async function cancelOrder(positionRequestPubkey) {
   const program = getProgram();
   const kp      = getKeypair();
   const pk      = new PublicKey(positionRequestPubkey);
 
-  // Check it still exists
   const info = await connection.getAccountInfo(pk);
   if (!info) {
-    log(`[${NETWORK}] cancelOrder: request already executed — nothing to cancel`);
+    log(`[${NETWORK}] cancelOrder: request already filled or closed`);
     return;
   }
 
   try {
-    const decoded  = program.coder.accounts.decode('PositionRequest', info.data);
-    const custody  = decoded.custody;
-    const side     = decoded.side.long !== undefined ? 'Long' : 'Short';
-    const asset    = Object.entries(CUSTODY_ACCOUNTS)
-                           .find(([,v]) => v.toBase58() === custody.toBase58())?.[0] || 'SOL';
+    const decoded   = program.coder.accounts.decode('PositionRequest', info.data);
+    const custody   = decoded.custody;
+    const side      = decoded.side.long !== undefined ? 'Long' : 'Short';
+    const asset     = Object.entries(CUSTODY_ACCOUNTS).find(([,v]) => v.toBase58() === custody.toBase58())?.[0] || 'SOL';
 
-    const [positionPDA] = derivePositionPDA(kp.publicKey, JLP_POOL, new PublicKey(custody), side);
-    const collateralMint = getCollateralMint(asset, side);
+    const collateralCustody = getCollateralCustody(asset, side);
+    const [positionPDA]     = derivePositionPDA(kp.publicKey, JLP_POOL, new PublicKey(custody), collateralCustody);
+    const collateralMint    = getCollateralMint(asset, side);
     const positionRequestATA = await getAssociatedTokenAddress(collateralMint, pk, true);
 
     const txSig = await program.methods
@@ -447,19 +436,13 @@ async function cancelOrder(positionRequestPubkey) {
       })
       .rpc({ commitment: 'confirmed' });
 
-    log(`[${NETWORK}] cancelPositionRequest tx: ${txSig}`);
+    log(`[${NETWORK}] cancelPositionRequest confirmed: ${txSig}`);
   } catch (err) {
     throw new Error(`[${NETWORK}] cancelOrder failed: ${err.message}`);
   }
 }
 
-// ── Close open position (market) ──────────────────────────────────
-/**
- * Closes an open position by sending a closePositionRequest instruction.
- * The keeper executes the close at current oracle price.
- *
- * @param {string} positionPubkey  the Position PDA (stored as position.id in server.js)
- */
+// -- Close open position (market) ----------------------------------
 async function closePosition(positionPubkey) {
   const program = getProgram();
   const kp      = getKeypair();
@@ -467,15 +450,14 @@ async function closePosition(positionPubkey) {
 
   const info = await connection.getAccountInfo(pk);
   if (!info) {
-    log(`[${NETWORK}] closePosition: position ${positionPubkey.slice(0,10)}… already closed`);
+    log(`[${NETWORK}] closePosition: position already closed`);
     return;
   }
 
   const decoded   = program.coder.accounts.decode('Position', info.data);
   const custody   = decoded.custody;
   const side      = decoded.side.long !== undefined ? 'Long' : 'Short';
-  const asset     = Object.entries(CUSTODY_ACCOUNTS)
-                          .find(([,v]) => v.toBase58() === custody.toBase58())?.[0] || 'SOL';
+  const asset     = Object.entries(CUSTODY_ACCOUNTS).find(([,v]) => v.toBase58() === custody.toBase58())?.[0] || 'SOL';
 
   const collateralCustody = getCollateralCustody(asset, side);
   const collateralMint    = getCollateralMint(asset, side);
@@ -486,49 +468,55 @@ async function closePosition(positionPubkey) {
   const traderATA       = await getAssociatedTokenAddress(collateralMint, kp.publicKey, false);
 
   try {
-    const txSig = await program.methods
+    const tx = new Transaction();
+    tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
+    tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }));
+
+    const closeIx = await program.methods
       .closePositionRequest({
         counter:           new anchor.BN(counter),
-        priceSlippage:     new anchor.BN(0),    // 0 = accept any price (market close)
+        priceSlippage:     new anchor.BN(0),
         sizeUsdDelta:      new anchor.BN(0),
         collateralDelta:   new anchor.BN(0),
         requestType:       { market: {} },
         jupiterMinimumOut: null,
-        entirePosition:    true,                // close entire position
+        entirePosition:    true,
       })
       .accounts({
-        owner:              kp.publicKey,
-        pool:               JLP_POOL,
-        custody:            new PublicKey(custody),
+        owner:                  kp.publicKey,
+        pool:                   JLP_POOL,
+        custody:                new PublicKey(custody),
         collateralCustody,
-        mint:               TOKEN_MINTS[asset],
+        mint:                   TOKEN_MINTS[asset],
         collateralMint,
-        position:           pk,
-        positionRequest:    closeRequestPDA,
-        positionRequestAta: closeRequestATA,
-        ownerTokenAccount:  traderATA,
-        tokenProgram:       TOKEN_PROGRAM_ID,
+        position:               pk,
+        positionRequest:        closeRequestPDA,
+        positionRequestAta:     closeRequestATA,
+        ownerTokenAccount:      traderATA,
+        tokenProgram:           TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram:      SystemProgram.programId,
-        rent:               SYSVAR_RENT_PUBKEY,
+        systemProgram:          SystemProgram.programId,
+        rent:                   SYSVAR_RENT_PUBKEY,
       })
-      .rpc({ commitment: 'confirmed' });
+      .instruction();
 
-    log(`[${NETWORK}] closePositionRequest tx: ${txSig}`);
+    tx.add(closeIx);
+
+    const txSig = await anchor.getProvider().sendAndConfirm(tx, [kp], {
+      commitment: 'confirmed',
+    });
+
+    log(`[${NETWORK}] closePositionRequest confirmed: ${txSig}`);
   } catch (err) {
     throw new Error(`[${NETWORK}] closePosition failed: ${err.message}`);
   }
 }
 
-// ── Startup log ───────────────────────────────────────────────────
+// -- Startup log ---------------------------------------------------
 log(`[${NETWORK}] Jupiter Anchor wrapper initialised`);
 log(`[${NETWORK}] Program: ${PERP_PROGRAM_ID.toBase58()}`);
 log(`[${NETWORK}] RPC:     ${RPC_URL}`);
 log(`[${NETWORK}] Wallet:  ${KEYPAIR_PATH}`);
-if (IS_DEVNET) {
-  log(`[DEVNET]  ⚠️  Devnet perp markets are limited. SOL only.`);
-  log(`[DEVNET]  ⚠️  Set DEVNET_PERP_PROGRAM_ID if devnet program differs.`);
-}
 
 module.exports = {
   placeLimitOrder,
