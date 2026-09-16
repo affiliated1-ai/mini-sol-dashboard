@@ -134,8 +134,27 @@ function calcMargin(confidenceScore, regime, recommendedMargin) {
   return { margin: parseFloat(margin.toFixed(2)), leverage: 40, mode: 'STANDARD' };
 }
 
+function validateSignal(sig) {
+  if (!sig || typeof sig !== 'object') throw new Error('Signal payload must be an object');
+
+  const required = ['direction', 'asset', 'price'];
+  const missing = required.filter(key => sig[key] === undefined || sig[key] === null || sig[key] === '');
+  if (missing.length) throw new Error(`Signal missing required field(s): ${missing.join(', ')}`);
+
+  if (!['green', 'red', 'yellow'].includes(sig.direction))
+    throw new Error(`Invalid signal direction: ${sig.direction}`);
+
+  const numericFields = ['price', 'atr', 'tp1', 'tp2', 'slCoeff', 'recommendedMargin'];
+  for (const field of numericFields) {
+    if (sig[field] !== undefined && !Number.isFinite(Number(sig[field])))
+      throw new Error(`Signal field ${field} must be a finite number`);
+  }
+}
+
 // ── Handle signal ─────────────────────────────────────────────────
 async function handleSignal(sig) {
+  validateSignal(sig);
+
   const {
     direction, price, atr, confidenceScore,
     asset, timeframe, reason, regime,
@@ -162,6 +181,7 @@ async function handleSignal(sig) {
     return { status: 'skip', message: `Already have ${direction} on ${asset} (${dup.requestPDA?.slice(0,8)}…).` };
 
   const isLong = direction === 'green';
+  const signalPrice = Number(price);
   const atrVal = parseFloat(atr) || 0.35;
   const rawOff = atrVal * 0.25;
   const off = Math.max(0.05, Math.min(rawOff, 0.20));
@@ -169,7 +189,7 @@ async function handleSignal(sig) {
   const _tp1 = tp1 || 0.35;
   const _tp2 = tp2 || 0.75;
 
-  const entryPrice = isLong ? price - off : price + off;
+  const entryPrice = isLong ? signalPrice - off : signalPrice + off;
   const stopLoss = isLong ? entryPrice - (sl * atrVal) : entryPrice + (sl * atrVal);
   const takeProfit = isLong ? entryPrice + _tp2 : entryPrice - _tp2;
 
