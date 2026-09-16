@@ -70,6 +70,22 @@ const API = IS_DEVNET
   ? 'https://perp.jup.ag/v1/devnet'
   : 'https://perp.jup.ag/v1';
 
+// Market addresses used by the Jupiter Perps order API.
+const MARKETS_MAINNET = {
+  SOL: 'GVXRSBjFk6e6J3NbVPXohDJetcTjaeeuykUpbQF8UoMU',
+  BTC: '4bM22ixZAhpuHtFvT4VhEfbDaGoGqiEyTtLFoQxdCGxe',
+  ETH: '87uHZqfRkBfPKRgS6gV94UFn4KqUBVTSHb6HuNBPEXHW',
+  BNB: 'DcwFiGMwdagfNbHHBFRHKLDJSJnhSPb1Mzo8TgpMELr4',
+  XRP: '6TdKK8mFg7pfX4xRXMPAXTYm2KbWHRQG9DPJjHHGHCe',
+};
+
+// Devnet currently supports SOL only.
+const MARKETS_DEVNET = {
+  SOL: 'E4v1BBgoso9s64TQvmyownAVJbhbEPGyz27zXFnzCn4i',
+};
+
+const MARKETS = IS_DEVNET ? MARKETS_DEVNET : MARKETS_MAINNET;
+
 // ── Custody accounts (mainnet) ────────────────────────────────────
 // Source: https://developers.jup.ag/docs/perps/custody-account
 const CUSTODY_ACCOUNTS = {
@@ -147,6 +163,18 @@ function getProgram() {
   _program = new anchor.Program(idl, PERP_PROGRAM_ID, provider);
   log(`[${NETWORK}] Jupiter Perps program loaded: ${PERP_PROGRAM_ID.toBase58()}`);
   return _program;
+}
+
+async function signAndSend(txBase64) {
+  const kp = getKeypair();
+  const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
+  tx.partialSign(kp);
+  const sig = await connection.sendRawTransaction(tx.serialize(), {
+    skipPreflight: false,
+    maxRetries: 3,
+  });
+  await connection.confirmTransaction(sig, 'confirmed');
+  return sig;
 }
 
 // ── PDA derivation ────────────────────────────────────────────────
