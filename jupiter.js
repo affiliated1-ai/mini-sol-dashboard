@@ -11,11 +11,11 @@ const { log } = require('./utils');
 
 const IS_DEVNET = process.env.DEVNET === 'true' || process.env.SOLANA_NETWORK === 'devnet';
 const RPC_URL = process.env.SOLANA_RPC_URL || (IS_DEVNET ? 'https://api.devnet.solana.com' : 'https://api.mainnet-beta.solana.com');
-const PROGRAM_ID = new PublicKey(process.env.DEVNET_PERP_PROGRAM_ID || 'PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu');
-const POOL = new PublicKey(process.env.JUPITER_POOL || '5BUwFW4nRbftYTDMbgxykoFWqWHPzahFSNAaaaJtVKsq');
+const PROGRAM_ID = requirePubkey(process.env.DEVNET_PERP_PROGRAM_ID || 'PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu', 'DEVNET_PERP_PROGRAM_ID');
+const POOL = requirePubkey(process.env.JUPITER_POOL || '5BUwFW4nRbftYTDMbgxykoFWqWHPzahFSNAaaaJtVKsq', 'JUPITER_POOL');
 const KEYPAIR_PATH = process.env.KEYPAIR_PATH || path.join(__dirname, IS_DEVNET ? 'wallet-devnet.json' : 'wallet.json');
-const MINTS = { USDC: new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') };
-const CUSTODIES = { SOL: new PublicKey('7xS2gz2bTp3fwCC7knJvUWTEU9Tycczu6VhJYKgi1wdz') };
+const MINTS = { USDC: requirePubkey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 'USDC mint') };
+const CUSTODIES = { SOL: requirePubkey('7xS2gz2bTp3fwCC7knJvUWTEU9Tycczu6VhJYKgi1wdz', 'SOL custody') };
 const KEEPER = process.env.JUPITER_KEEPER;
 const API_KEEPER = process.env.JUPITER_API_KEEPER;
 const DOVES_PRICE_ACCOUNT = process.env.JUPITER_DOVES_PRICE_ACCOUNT;
@@ -29,6 +29,30 @@ function finiteNumber(value, name) {
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(`${name} must be a finite number`);
   return number;
+}
+
+function requirePubkey(value, name) {
+  if (value === undefined || value === null || value === '') {
+    throw new Error(`${name} is not configured`);
+  }
+  if (typeof value === 'string') {
+    try {
+      return new PublicKey(value);
+    } catch (e) {
+      throw new Error(`Invalid ${name}: ${value}`);
+    }
+  }
+  if (typeof value.toBase58 !== 'function') {
+    throw new Error(`${name} is not a valid Solana public key`);
+  }
+  return value;
+}
+
+function requireAccount(name, value) {
+  if (value === undefined || value === null) {
+    throw new Error(`Missing required account for instruction: ${name}`);
+  }
+  return requirePubkey(value, name);
 }
 
 function atomic(value, name) {
@@ -104,16 +128,20 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage }
   if (missingAccounts.length) throw new Error(`Missing Jupiter account configuration: ${missingAccounts.join(', ')}`);
 
   const owner = getKeypair().publicKey;
-  const custody = CUSTODIES[asset];
+  const custody = requireAccount('custody', CUSTODIES[asset]);
   const position = derivePosition(owner, custody, side);
   const counterValue = Date.now();
   const counterBuffer = new anchor.BN(counterValue).toArrayLike(Buffer, 'le', 8);
   const request = PublicKey.findProgramAddressSync([Buffer.from('position_request'), position.toBuffer(), counterBuffer], PROGRAM_ID)[0];
-  const collateralMint = MINTS.USDC;
+  const collateralMint = requireAccount('collateralMint', MINTS.USDC);
   const fundingAccount = await getAssociatedTokenAddress(collateralMint, owner);
   const requestAta = await getAssociatedTokenAddress(collateralMint, request, true);
   const perpetuals = PublicKey.findProgramAddressSync([Buffer.from('perpetuals')], PROGRAM_ID)[0];
   const eventAuthority = PublicKey.findProgramAddressSync([Buffer.from('__event_authority')], PROGRAM_ID)[0];
+  const keeperPk = requireAccount('keeper', KEEPER);
+  const apiKeeperPk = requireAccount('apiKeeper', API_KEEPER);
+  const dovesAccountPk = requireAccount('dovesPriceAccount', DOVES_PRICE_ACCOUNT);
+  const pythnetAccountPk = requireAccount('pythnetPriceAccount', PYTHNET_PRICE_ACCOUNT);
 
   const tx = await getProgram().methods.instantCreateLimitOrder({
     params: {
@@ -126,12 +154,25 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage }
       requestTime: new anchor.BN(Math.floor(Date.now() / 1000)),
     },
   }).accounts({
-    keeper: new PublicKey(KEEPER), apiKeeper: new PublicKey(API_KEEPER), owner, fundingAccount, perpetuals, pool: POOL,
-    position, positionRequest: request, positionRequestAta: requestAta,
-    custody, collateralCustody: custody, inputMint: collateralMint, tokenProgram: TOKEN_PROGRAM_ID,
-    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, eventAuthority, program: PROGRAM_ID,
-    custodyDovesPriceAccount: new PublicKey(DOVES_PRICE_ACCOUNT),
-    custodyPythnetPriceAccount: new PublicKey(PYTHNET_PRICE_ACCOUNT),
+    keeper: keeperPk,
+    apiKeeper: apiKeeperPk,
+    owner,
+    fundingAccount,
+    perpetuals,
+    pool: POOL,
+    position,
+    positionRequest: request,
+    positionRequestAta: requestAta,
+    custody,
+    collateralCustody: custody,
+    inputMint: collateralMint,
+    tokenProgram: TOKEN_PROGRAM_ID,
+    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+    systemProgram: SystemProgram.programId,
+    eventAuthority,
+    program: PROGRAM_ID,
+    custodyDovesPriceAccount: dovesAccountPk,
+    custodyPythnetPriceAccount: pythnetAccountPk,
   }).rpc({ commitment: 'confirmed' });
 
   positionsByRequest.set(request.toBase58(), position);
