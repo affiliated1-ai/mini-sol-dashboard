@@ -108,6 +108,26 @@ function getKeypair() {
 const connection = new Connection(RPC_URL, 'confirmed');
 let _program = null;
 
+function normalizeIdlTypes(value) {
+  if (Array.isArray(value)) return value.map(normalizeIdlTypes);
+  if (!value || typeof value !== 'object') return value;
+
+  const normalized = {};
+  const primitiveTypes = /^(bool|u8|i8|u16|i16|u32|i32|u64|i64|u128|i128|f32|f64|bytes|string|pubkey|publicKey)$/;
+  for (const [key, child] of Object.entries(value)) {
+    if ((key === 'type' || key === 'option' || key === 'vec') && child === 'publicKey') {
+      normalized[key] = 'pubkey';
+    } else if ((key === 'type' || key === 'option' || key === 'vec') && typeof child === 'string' && !primitiveTypes.test(child)) {
+      normalized[key] = { defined: { name: child } };
+    } else if ((key === 'type' || key === 'option' || key === 'vec') && child && typeof child === 'object' && child.defined && typeof child.defined === 'string') {
+      normalized[key] = { ...child, defined: { name: child.defined } };
+    } else {
+      normalized[key] = normalizeIdlTypes(child);
+    }
+  }
+  return normalized;
+}
+
 function getProgram() {
   if (_program) return _program;
 
@@ -122,7 +142,17 @@ function getProgram() {
   }
 
   const kp       = getKeypair();
-  const idl      = JSON.parse(fs.readFileSync(idlPath, 'utf8'));
+  const idl      = normalizeIdlTypes(JSON.parse(fs.readFileSync(idlPath, 'utf8')));
+  if (idl.accounts && idl.types) {
+    idl.accounts = idl.accounts.filter(account =>
+      idl.types.some(type => type.name === account.name)
+    );
+  }
+  if (idl.events && idl.types) {
+    idl.events = idl.events.filter(event =>
+      idl.types.some(type => type.name === event.name)
+    );
+  }
   if (!idl.address) {
     idl.address = PERP_PROGRAM_ID.toBase58();
   }
@@ -133,11 +163,7 @@ function getProgram() {
   });
   anchor.setProvider(provider);
 
-  try {
-    _program = new anchor.Program(idl, PERP_PROGRAM_ID, provider);
-  } catch (e) {
-    _program = new anchor.Program(idl, provider);
-  }
+  _program = new anchor.Program(idl, provider);
   log(`[${NETWORK}] Jupiter Perps program loaded: ${PERP_PROGRAM_ID.toBase58()}`);
   return _program;
 }
@@ -244,14 +270,9 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
 
     // Locate instruction in loaded IDL
     const availableIxNames = program.idl.instructions.map(i => i.name);
-    let targetIxName = 'openPositionRequest';
+    const targetIxName = 'createIncreasePositionMarketRequest';
     if (!availableIxNames.includes(targetIxName)) {
-      targetIxName = availableIxNames.find(n => 
-        n === 'createIncreasePositionMarketRequest' ||
-        n === 'create_increase_position_market_request' ||
-        n.toLowerCase().includes('increaseposition') ||
-        n.toLowerCase().includes('openposition')
-      ) || availableIxNames[0];
+      throw new Error(`IDL does not contain ${targetIxName}`);
     }
 
     const idlIx = program.idl.instructions.find(i => i.name === targetIxName);
@@ -277,6 +298,7 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
       mint,
       collateralMint,
       inputMint: collateralMint,
+      referral: null,
       tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
@@ -304,30 +326,11 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
       side:              side === 'Long' ? { long: {} } : { short: {} },
       priceSlippage:     new anchor.BN(priceSlippageAtomic),
       sizeUsdDelta:      new anchor.BN(sizeUsdDeltaAtomic),
-      collateralDelta:   new anchor.BN(collateralDeltaAtomic),
-      requestType:       { market: {} },
+      collateralTokenDelta: new anchor.BN(collateralDeltaAtomic),
       jupiterMinimumOut: null,
     };
 
-    let methodBuilder;
-    if (idlIx && idlIx.args && idlIx.args.length > 1) {
-      // Positional arguments
-      const argsList = [];
-      for (const argDef of idlIx.args) {
-        if (argDef.name === 'counter') argsList.push(new anchor.BN(counter));
-        else if (argDef.name === 'side') argsList.push(side === 'Long' ? { long: {} } : { short: {} });
-        else if (argDef.name === 'priceSlippage') argsList.push(new anchor.BN(priceSlippageAtomic));
-        else if (argDef.name === 'sizeUsdDelta') argsList.push(new anchor.BN(sizeUsdDeltaAtomic));
-        else if (argDef.name === 'collateralDelta') argsList.push(new anchor.BN(collateralDeltaAtomic));
-        else if (argDef.name === 'requestType') argsList.push({ market: {} });
-        else if (argDef.name === 'jupiterMinimumOut') argsList.push(null);
-        else argsList.push(paramsObj[argDef.name] ?? new anchor.BN(0));
-      }
-      methodBuilder = program.methods[targetIxName](...argsList);
-    } else {
-      // Single struct params argument
-      methodBuilder = program.methods[targetIxName](paramsObj);
-    }
+    const methodBuilder = program.methods[targetIxName](paramsObj);
 
     const openIx = await methodBuilder
       .accounts(accountsMap)
