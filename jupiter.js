@@ -316,9 +316,13 @@ async function placeLimitOrder({
       mint,
       collateralMint,
       inputMint: collateralMint,
+<<<<<<< HEAD
       // Referral sentinel: on-chain Anchor deserializes PERP_PROGRAM_ID as None
       referral: PERP_PROGRAM_ID,
       referralAccount: PERP_PROGRAM_ID,
+=======
+      referral: PERP_PROGRAM_ID,
+>>>>>>> e83a9ac (still testing autotrade on dev)
       tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
