@@ -10,7 +10,7 @@ window.DASHBOARD_CONFIG = {
 
   // Telegram Bot Token
   // Get this from @BotFather on Telegram
-  TELEGRAM_TOKEN: "8248545561:AAH03GqpMD58hk1rVgVLbLo5sntu1lNPY_8",
+  TELEGRAM_TOKEN: "8248545561:AAFLczHHkZXJj5e4fHMsjG3vbxBEZyGnBSA",
 
   // Telegram Chat ID
   // The group or channel to send signals to
