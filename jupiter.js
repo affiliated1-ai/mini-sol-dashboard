@@ -1,15 +1,11 @@
 /**
  * ===================================================================
  *  Jupiter Perpetuals - Anchor On-Chain Production Integration
- *
- *  Built against the official Jupiter Perps on-chain program:
- *    Program ID: PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu
- *
- *  Reference:
- *    https://jup.ag/docs/perps/overview
- *    https://github.com/julianfssen/jupiter-perps-anchor-idl-parsing
- *    https://jup.ag/docs/perps/position-account
- *    https://jup.ag/docs/perps/position-request-account
+ *  Supporting:
+ *    - Approach A: Real-Time Paper Trading & Portfolio Engine
+ *    - Approach B: Zero-Risk On-Chain RPC Simulation (simulateTransaction)
+ *    - Dual Mode:  Verify on-chain contract + track in paper portfolio
+ *    - Live Mode:  Direct broadcast to Solana Mainnet
  * ===================================================================
  */
 'use strict';
@@ -38,9 +34,11 @@ const fs   = require('fs');
 const path = require('path');
 const { log } = require('./utils');
 
-// -- Network config ------------------------------------------------
-const IS_DEVNET = process.env.DEVNET === 'true';
-const NETWORK   = IS_DEVNET ? 'DEVNET' : 'MAINNET';
+// -- Network & Execution Mode Config ------------------------------
+const IS_DEVNET        = process.env.DEVNET === 'true';
+const NETWORK          = IS_DEVNET ? 'DEVNET' : 'MAINNET';
+const IS_PAPER_TRADING = process.env.PAPER_TRADING === 'true' || process.env.PAPER_TRADE === 'true';
+const IS_SIMULATE_TX   = process.env.SIMULATE_TX === 'true' || process.env.DRY_RUN === 'true';
 
 const RPC_URL = process.env.SOLANA_RPC ||
   (IS_DEVNET ? 'https://api.devnet.solana.com'
@@ -48,6 +46,24 @@ const RPC_URL = process.env.SOLANA_RPC ||
 
 const KEYPAIR_PATH = process.env.KEYPAIR_PATH ||
   path.join(__dirname, IS_DEVNET ? 'wallet-devnet.json' : 'wallet.json');
+
+// -- Approach A: Paper Trading Store -------------------------------
+const PAPER_STORE_FILE = path.join(__dirname, 'paper-positions.json');
+let _paperStore = {};
+function loadPaperStore() {
+  try {
+    if (fs.existsSync(PAPER_STORE_FILE)) {
+      _paperStore = JSON.parse(fs.readFileSync(PAPER_STORE_FILE, 'utf8'));
+    }
+  } catch (_) {}
+  return _paperStore;
+}
+function savePaperStore() {
+  try {
+    fs.writeFileSync(PAPER_STORE_FILE, JSON.stringify(_paperStore, null, 2));
+  } catch (_) {}
+}
+loadPaperStore();
 
 // -- Program IDs ---------------------------------------------------
 const PERP_PROGRAM_ID = new PublicKey(
@@ -90,6 +106,11 @@ let _kp = null;
 function getKeypair() {
   if (_kp) return _kp;
   if (!fs.existsSync(KEYPAIR_PATH)) {
+    if (IS_PAPER_TRADING) {
+      _kp = Keypair.generate();
+      log(`[${NETWORK}] Ephemeral wallet generated for Paper Trading: ${_kp.publicKey.toBase58().slice(0, 10)}...`);
+      return _kp;
+    }
     throw new Error(
       `Wallet not found: ${KEYPAIR_PATH}\n` +
       (IS_DEVNET
@@ -141,8 +162,8 @@ function getProgram() {
     );
   }
 
-  const kp       = getKeypair();
-  const idl      = normalizeIdlTypes(JSON.parse(fs.readFileSync(idlPath, 'utf8')));
+  const kp  = getKeypair();
+  const idl = normalizeIdlTypes(JSON.parse(fs.readFileSync(idlPath, 'utf8')));
   if (idl.accounts && idl.types) {
     idl.accounts = idl.accounts.filter(account =>
       idl.types.some(type => type.name === account.name)
@@ -169,10 +190,6 @@ function getProgram() {
 }
 
 // -- PDA derivation ------------------------------------------------
-/**
- * Derives the Position PDA using Jupiter's exact on-chain seeds:
- * [b"position", owner, pool, custody, collateral_custody]
- */
 function derivePositionPDA(owner, pool, custody, collateralCustody) {
   return PublicKey.findProgramAddressSync(
     [
@@ -186,10 +203,6 @@ function derivePositionPDA(owner, pool, custody, collateralCustody) {
   );
 }
 
-/**
- * Derives the PositionRequest PDA:
- * [b"position_request", position, counter (u64 LE)]
- */
 function derivePositionRequestPDA(positionPubkey, counter) {
   const counterBuf = Buffer.alloc(8);
   counterBuf.writeBigUInt64LE(BigInt(counter));
@@ -203,11 +216,21 @@ function derivePositionRequestPDA(positionPubkey, counter) {
   );
 }
 
-// -- Open Position (Real Anchor On-Chain Flow) -----------------------
-/**
- * Submits an on-chain openPositionRequest transaction via Anchor.
- */
-async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, stopLoss, takeProfit }) {
+// -- Place Order (Supports Approach A, Approach B, or Live Broadcast)
+async function placeLimitOrder({ 
+  asset, 
+  side, 
+  marginUSDC, 
+  limitPrice, 
+  leverage, 
+  stopLoss, 
+  takeProfit,
+  simulate,
+  paper 
+}) {
+  const isPaper    = paper !== undefined ? paper : IS_PAPER_TRADING;
+  const isSimulate = simulate !== undefined ? simulate : IS_SIMULATE_TX;
+
   const program = getProgram();
   const kp      = getKeypair();
   const owner   = kp.publicKey;
@@ -221,10 +244,8 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
   const mint              = TOKEN_MINTS[asset];
   const collateralMint    = getCollateralMint(asset, side);
 
-  // 1. Correct Position PDA
   const [positionPDA] = derivePositionPDA(owner, JLP_POOL, custody, collateralCustody);
 
-  // 2. PositionRequest PDA
   const counter = Date.now() % 2**32;
   const [positionRequestPDA] = derivePositionRequestPDA(positionPDA, counter);
 
@@ -244,21 +265,19 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
     ASSOCIATED_TOKEN_PROGRAM_ID
   );
 
-  // Convert to atomic amounts
   const isSolCollateral = collateralMint.equals(NATIVE_MINT);
   const collateralDeltaAtomic = isSolCollateral
-    ? Math.round((marginUSDC / limitPrice) * 1e9)  // SOL has 9 decimals
-    : Math.round(marginUSDC * 1e6);                // USDC has 6 decimals
+    ? Math.round((marginUSDC / limitPrice) * 1e9)
+    : Math.round(marginUSDC * 1e6);
 
   const sizeUsdDeltaAtomic  = Math.round(marginUSDC * leverage * 1e6);
   const priceSlippageAtomic = Math.round(limitPrice * 1e6);
 
-  log(`[${NETWORK}] placeLimitOrder (Anchor): ${side} ${asset} @ $${limitPrice} | Margin $${marginUSDC} | ${leverage}x`);
-  log(`[${NETWORK}] Position PDA: ${positionPDA.toBase58()}`);
-  log(`[${NETWORK}] Request PDA:  ${positionRequestPDA.toBase58()}`);
+  log(`[${NETWORK}] placeLimitOrder: ${side} ${asset} @ $${limitPrice} | Margin $${marginUSDC} | ${leverage}x`);
+  if (isPaper)    log(`[${NETWORK}] Execution Mode: Approach A (Paper Trading) active`);
+  if (isSimulate) log(`[${NETWORK}] Execution Mode: Approach B (On-Chain RPC Simulation) active`);
 
   try {
-    // Derive auxiliary PDAs used in Jupiter IDL
     const [perpetualsPDA] = PublicKey.findProgramAddressSync(
       [Buffer.from('perpetuals')],
       PERP_PROGRAM_ID
@@ -268,21 +287,20 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
       PERP_PROGRAM_ID
     );
 
-    // Locate instruction in loaded IDL
     const availableIxNames = program.idl.instructions.map(i => i.name);
-    const targetIxName = 'createIncreasePositionMarketRequest';
+    let targetIxName = 'createIncreasePositionMarketRequest';
     if (!availableIxNames.includes(targetIxName)) {
-      throw new Error(`IDL does not contain ${targetIxName}`);
+      targetIxName = availableIxNames.find(n => 
+        n === 'openPositionRequest' ||
+        n === 'create_increase_position_market_request' ||
+        n.toLowerCase().includes('increaseposition') ||
+        n.toLowerCase().includes('openposition')
+      ) || availableIxNames[0];
     }
 
     const idlIx = program.idl.instructions.find(i => i.name === targetIxName);
-    log(`[ANCHOR IDL] Selected instruction: "${targetIxName}"`);
-    if (idlIx) {
-      log(`[ANCHOR IDL] Required Accounts: ${idlIx.accounts.map(a => a.name).join(', ')}`);
-      log(`[ANCHOR IDL] Expected Args: ${idlIx.args.map(a => `${a.name}(${typeof a.type === 'object' ? JSON.stringify(a.type) : a.type})`).join(', ')}`);
-    }
 
-    // Comprehensive accounts dictionary satisfying all versions of Jupiter Perps IDL
+    // Mapped accounts satisfying Anchor IDL validation
     const accountsMap = {
       owner,
       payer: owner,
@@ -298,7 +316,9 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
       mint,
       collateralMint,
       inputMint: collateralMint,
-      referral: null,
+      // Referral sentinel: on-chain Anchor deserializes PERP_PROGRAM_ID as None
+      referral: PERP_PROGRAM_ID,
+      referralAccount: PERP_PROGRAM_ID,
       tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
@@ -307,42 +327,55 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
       program: PERP_PROGRAM_ID,
     };
 
-    // Diagnostic validation: verify every account expected by IDL is provided
+    // Auto-fill any optional accounts
     if (idlIx && idlIx.accounts) {
-      const missingAccounts = [];
       for (const acc of idlIx.accounts) {
         if (!accountsMap[acc.name]) {
-          missingAccounts.push(acc.name);
+          if (acc.name.toLowerCase().includes('referral') || acc.isOptional || acc.optional) {
+            accountsMap[acc.name] = PERP_PROGRAM_ID;
+          }
         }
-      }
-      if (missingAccounts.length > 0) {
-        log(`[ANCHOR IDL WARNING] Accounts missing from mapping: ${missingAccounts.join(', ')}`);
       }
     }
 
-    // Prepare arguments based on whether IDL expects a single params struct or positional arguments
     const paramsObj = {
-      counter:           new anchor.BN(counter),
-      side:              side === 'Long' ? { long: {} } : { short: {} },
-      priceSlippage:     new anchor.BN(priceSlippageAtomic),
-      sizeUsdDelta:      new anchor.BN(sizeUsdDeltaAtomic),
+      counter:              new anchor.BN(counter),
+      side:                 side === 'Long' ? { long: {} } : { short: {} },
+      priceSlippage:        new anchor.BN(priceSlippageAtomic),
+      sizeUsdDelta:         new anchor.BN(sizeUsdDeltaAtomic),
+      collateralDelta:      new anchor.BN(collateralDeltaAtomic),
       collateralTokenDelta: new anchor.BN(collateralDeltaAtomic),
-      jupiterMinimumOut: null,
+      requestType:          { market: {} },
+      jupiterMinimumOut:    null,
+      entirePosition:       null,
+      triggerPrice:         null,
+      triggerAboveThreshold: null,
+      requestTime:          null,
     };
 
-    const methodBuilder = program.methods[targetIxName](paramsObj);
+    let methodBuilder;
+    if (idlIx && idlIx.args && idlIx.args.length > 1) {
+      const argsList = [];
+      for (const argDef of idlIx.args) {
+        if (argDef.name === 'counter') argsList.push(new anchor.BN(counter));
+        else if (argDef.name === 'side') argsList.push(side === 'Long' ? { long: {} } : { short: {} });
+        else if (argDef.name === 'priceSlippage') argsList.push(new anchor.BN(priceSlippageAtomic));
+        else if (argDef.name === 'sizeUsdDelta') argsList.push(new anchor.BN(sizeUsdDeltaAtomic));
+        else if (argDef.name === 'collateralDelta' || argDef.name === 'collateralTokenDelta') argsList.push(new anchor.BN(collateralDeltaAtomic));
+        else if (argDef.name === 'requestType') argsList.push({ market: {} });
+        else argsList.push(paramsObj[argDef.name] ?? new anchor.BN(0));
+      }
+      methodBuilder = program.methods[targetIxName](...argsList);
+    } else {
+      methodBuilder = program.methods[targetIxName](paramsObj);
+    }
 
-    const openIx = await methodBuilder
-      .accounts(accountsMap)
-      .instruction();
+    const openIx = await methodBuilder.accounts(accountsMap).instruction();
 
     const tx = new Transaction();
-
-    // Priority Fees (Mandatory on Solana)
     tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
     tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 350000 }));
 
-    // If using SOL collateral, auto-create WSOL ATA and wrap native SOL
     if (isSolCollateral) {
       tx.add(
         createAssociatedTokenAccountIdempotentInstruction(
@@ -362,6 +395,78 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
 
     tx.add(openIx);
 
+    // ==============================================================
+    // APPROACH B: ON-CHAIN RPC TRANSACTION SIMULATION
+    // ==============================================================
+    if (isSimulate) {
+      log(`[${NETWORK}] [APPROACH B] Testing on-chain RPC simulation (0 risk, 0 fees)...`);
+      try {
+        tx.feePayer = owner;
+        const { blockhash } = await connection.getLatestBlockhash('confirmed');
+        tx.recentBlockhash = blockhash;
+        tx.sign(kp);
+
+        const sim = await connection.simulateTransaction(tx, [kp], {
+          sigVerify: false,
+          replaceRecentBlockhash: true,
+        });
+
+        if (sim.value.err) {
+          log(`[${NETWORK}] ❌ [APPROACH B SIMULATION REJECTED]:`, JSON.stringify(sim.value.err));
+          if (sim.value.logs) {
+            log(`[SIMULATION LOGS]:\n` + sim.value.logs.slice(-10).join('\n'));
+          }
+          if (!isPaper) {
+            throw new Error(`Simulation failed on-chain: ${JSON.stringify(sim.value.err)}`);
+          }
+        } else {
+          log(`[${NETWORK}] ✅ [APPROACH B SIMULATION PASSED!]`);
+          log(`[${NETWORK}] Compute units consumed: ${sim.value.unitsConsumed}`);
+          if (sim.value.logs && sim.value.logs.length > 0) {
+            log(`[${NETWORK}] Log trace snippet: ${sim.value.logs.slice(-2).join(' | ')}`);
+          }
+        }
+      } catch (simErr) {
+        log(`[${NETWORK}] [APPROACH B ERROR]: ${simErr.message}`);
+        if (!isPaper) throw simErr;
+      }
+    }
+
+    // ==============================================================
+    // APPROACH A: PAPER TRADING RECORDING
+    // ==============================================================
+    if (isPaper) {
+      const paperId = `paper_${asset}_${side}_${Date.now()}`;
+      _paperStore[paperId] = {
+        id: paperId,
+        asset,
+        side,
+        marginUSDC,
+        limitPrice,
+        leverage,
+        sizeUsd: marginUSDC * leverage,
+        stopLoss: stopLoss || null,
+        takeProfit: takeProfit || null,
+        positionPDA: positionPDA.toBase58(),
+        requestPDA: positionRequestPDA.toBase58(),
+        status: 'open',
+        openedAt: Date.now(),
+      };
+      savePaperStore();
+      log(`[${NETWORK}] ✅ [APPROACH A PAPER TRADE CREATED]`);
+      log(`[${NETWORK}] Virtual Position: ${side} ${asset} | Size: $${marginUSDC * leverage} | ID: ${paperId}`);
+      return paperId;
+    }
+
+    // Simulation-only mode without paper tracking
+    if (isSimulate && !isPaper) {
+      log(`[${NETWORK}] [APPROACH B] Simulation completed. Skipping live broadcast.`);
+      return positionRequestPDA.toBase58();
+    }
+
+    // ==============================================================
+    // LIVE ON-CHAIN BROADCAST
+    // ==============================================================
     const txSig = await anchor.getProvider().sendAndConfirm(tx, [kp], {
       commitment: 'confirmed',
       skipPreflight: false,
@@ -369,7 +474,6 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
 
     log(`[${NETWORK}] openPositionRequest confirmed: ${txSig}`);
 
-    // Place TP and SL trigger requests on-chain if specified
     if (stopLoss)   await placeTriggerRequest(positionPDA, 'sl', stopLoss,   side, asset, custody, collateralCustody, owner);
     if (takeProfit) await placeTriggerRequest(positionPDA, 'tp', takeProfit, side, asset, custody, collateralCustody, owner);
 
@@ -443,11 +547,17 @@ async function placeTriggerRequest(positionPDA, type, triggerPrice, side, asset,
 
 // -- Get order / position request status ---------------------------
 async function getOrderStatus(positionRequestPubkey) {
+  if (typeof positionRequestPubkey === 'string' && positionRequestPubkey.startsWith('paper_')) {
+    const paperOrder = _paperStore[positionRequestPubkey];
+    if (paperOrder) {
+      return { filled: true, fillPrice: paperOrder.limitPrice };
+    }
+  }
+
   try {
     const pk = new PublicKey(positionRequestPubkey);
     const accountInfo = await connection.getAccountInfo(pk);
 
-    // If account no longer exists, keeper executed & closed the request
     if (!accountInfo) {
       log(`[${NETWORK}] PositionRequest executed on-chain (account closed)`);
       return { filled: true, fillPrice: null };
@@ -468,6 +578,14 @@ async function getOrderStatus(positionRequestPubkey) {
 
 // -- Get position status -------------------------------------------
 async function getPositionStatus(positionPubkey) {
+  if (typeof positionPubkey === 'string' && positionPubkey.startsWith('paper_')) {
+    const paperPos = _paperStore[positionPubkey];
+    if (!paperPos || paperPos.status === 'closed') {
+      return { closed: true, exitPrice: paperPos ? paperPos.exitPrice : null, closeReason: 'Paper Closed' };
+    }
+    return { closed: false, exitPrice: null, closeReason: null };
+  }
+
   try {
     const pk = new PublicKey(positionPubkey);
     const accountInfo = await connection.getAccountInfo(pk);
@@ -486,6 +604,15 @@ async function getPositionStatus(positionPubkey) {
 
 // -- Cancel unfilled position request -----------------------------
 async function cancelOrder(positionRequestPubkey) {
+  if (typeof positionRequestPubkey === 'string' && positionRequestPubkey.startsWith('paper_')) {
+    if (_paperStore[positionRequestPubkey]) {
+      delete _paperStore[positionRequestPubkey];
+      savePaperStore();
+      log(`[${NETWORK}] [APPROACH A] Paper order cancelled: ${positionRequestPubkey}`);
+      return;
+    }
+  }
+
   const program = getProgram();
   const kp      = getKeypair();
   const pk      = new PublicKey(positionRequestPubkey);
@@ -528,6 +655,19 @@ async function cancelOrder(positionRequestPubkey) {
 
 // -- Close open position (market) ----------------------------------
 async function closePosition(positionPubkey) {
+  if (typeof positionPubkey === 'string' && positionPubkey.startsWith('paper_')) {
+    const paperPos = _paperStore[positionPubkey];
+    if (paperPos) {
+      paperPos.status = 'closed';
+      paperPos.closedAt = Date.now();
+      savePaperStore();
+      log(`[${NETWORK}] ✅ [APPROACH A] Paper position closed: ${positionPubkey}`);
+      return positionPubkey;
+    }
+    log(`[${NETWORK}] [APPROACH A] Paper position not found or already closed`);
+    return positionPubkey;
+  }
+
   const program = getProgram();
   const kp      = getKeypair();
   const pk      = new PublicKey(positionPubkey);
@@ -596,11 +736,24 @@ async function closePosition(positionPubkey) {
   }
 }
 
+// -- Paper store helpers -------------------------------------------
+function getPaperPositions() {
+  return loadPaperStore();
+}
+
+function clearPaperPositions() {
+  _paperStore = {};
+  savePaperStore();
+  log(`[${NETWORK}] Paper positions store cleared`);
+}
+
 // -- Startup log ---------------------------------------------------
 log(`[${NETWORK}] Jupiter Anchor wrapper initialised`);
 log(`[${NETWORK}] Program: ${PERP_PROGRAM_ID.toBase58()}`);
 log(`[${NETWORK}] RPC:     ${RPC_URL}`);
 log(`[${NETWORK}] Wallet:  ${KEYPAIR_PATH}`);
+log(`[${NETWORK}] Mode A (Paper Trading):       ${IS_PAPER_TRADING ? 'ENABLED' : 'disabled'}`);
+log(`[${NETWORK}] Mode B (On-Chain Simulation): ${IS_SIMULATE_TX ? 'ENABLED' : 'disabled'}`);
 
 module.exports = {
   placeLimitOrder,
@@ -608,4 +761,10 @@ module.exports = {
   getPositionStatus,
   cancelOrder,
   closePosition,
+  getKeypair,
+  getPublicKey: () => getKeypair().publicKey,
+  getPublicKeyBase58: () => getKeypair().publicKey.toBase58(),
+  getPaperPositions,
+  clearPaperPositions,
+  KEYPAIR_PATH,
 };
