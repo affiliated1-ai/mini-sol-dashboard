@@ -690,14 +690,15 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
 
     // Locate instruction in loaded IDL
     const availableIxNames = program.idl.instructions.map(i => i.name);
-    let targetIxName = 'openPositionRequest';
-    if (!availableIxNames.includes(targetIxName)) {
-      targetIxName = availableIxNames.find(n => 
-        n === 'createIncreasePositionMarketRequest' ||
-        n === 'create_increase_position_market_request' ||
-        n.toLowerCase().includes('increaseposition') ||
-        n.toLowerCase().includes('openposition')
-      ) || availableIxNames[0];
+    const targetIxName = [
+      'openPositionRequest',
+      'createIncreasePositionMarketRequest',
+      'create_increase_position_market_request',
+    ].find(name => availableIxNames.includes(name));
+    if (!targetIxName) {
+      throw new Error(
+        `No supported position-request instruction found in IDL. Available: ${availableIxNames.join(', ')}`
+      );
     }
 
     const idlIx = program.idl.instructions.find(i => i.name === targetIxName);
