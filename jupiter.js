@@ -678,6 +678,22 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
   log(`[${NETWORK}] Request PDA:  ${positionRequestPDA.toBase58()}`);
 
   try {
+    let rpcSimulationAvailable = true;
+    if (isSimulate || !isPaper) {
+      const programInfo = await connection.getAccountInfo(PERP_PROGRAM_ID);
+      if (!programInfo || !programInfo.executable) {
+        const message =
+          `Jupiter Perps program ${PERP_PROGRAM_ID.toBase58()} is not deployed on ${RPC_URL}. ` +
+          'Use the network where the Jupiter Perps program and configured pool/custody accounts exist (currently mainnet), or use paper trading without RPC simulation.';
+        if (isPaper) {
+          log(`[${NETWORK}] [APPROACH B SKIPPED] ${message}`);
+          rpcSimulationAvailable = false;
+        } else {
+          throw new Error(message);
+        }
+      }
+    }
+
     // Derive auxiliary PDAs used in Jupiter IDL
     const [perpetualsPDA] = PublicKey.findProgramAddressSync(
       [Buffer.from('perpetuals')],
@@ -853,7 +869,7 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
       // ==============================================================
       // APPROACH B: ON-CHAIN TRANSACTION SIMULATION
       // ==============================================================
-      if (isSimulate) {
+      if (isSimulate && rpcSimulationAvailable) {
         log(`[${NETWORK}] [APPROACH B] Testing on-chain RPC simulation (0 risk, 0 fees)...`);
         try {
           tx.feePayer = owner;
