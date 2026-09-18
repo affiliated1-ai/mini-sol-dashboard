@@ -36,6 +36,7 @@ const {
 } = require('@solana/spl-token');
 const fs   = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 let log = console.log;
 try {
   const u = require('./utils');
@@ -271,7 +272,7 @@ function repairAndSanitizeIdl(rawIdl) {
   ];
 
   for (const st of standardTypeDefs) {
-    const existing = idl.types.find(t => t.name.toLowerCase() === st.name.toLowerCase());
+    const existing = idl.types.find(t => t.name === st.name);
     if (!existing) {
       idl.types.push(st);
     }
@@ -295,7 +296,7 @@ function repairAndSanitizeIdl(rawIdl) {
       }
 
       if (typeDefName && !primitives.has(typeDefName)) {
-        const found = idl.types.some(t => t.name.toLowerCase() === typeDefName.toLowerCase());
+        const found = idl.types.some(t => t.name === typeDefName);
         if (!found) {
           log(`[IDL REPAIR] Auto-generating missing type definition: "${typeDefName}" for argument "${arg.name}"`);
           idl.types.push({
@@ -307,23 +308,55 @@ function repairAndSanitizeIdl(rawIdl) {
     }
   }
 
-  // 4. Ensure dual compatibility for Anchor 0.29 (expects string) and 0.30+ (expects { name: string })
-  function dualFormatDefined(node) {
+  // Anchor resolves event layouts from the shared types list as well.
+  for (const event of (idl.events || [])) {
+    if (!idl.types.some(t => t.name === event.name)) {
+      idl.types.push({
+        name: event.name,
+        type: { kind: 'struct', fields: event.fields || [] },
+      });
+    }
+  }
+
+  // Anchor 0.32 expects defined types in the { name } form.
+  function normalizeDefinedTypes(node) {
     if (!node || typeof node !== 'object') return;
     for (const key of Object.keys(node)) {
-      if (key === 'defined') {
+      if (node[key] === 'publicKey') {
+        node[key] = 'pubkey';
+      } else if (key === 'defined') {
         const current = node[key];
-        const name = typeof current === 'object' ? (current.name || String(current)) : String(current);
-        // String object with .name property fulfills both equality checks
-        const dual = new String(name);
-        dual.name = name;
-        node[key] = dual;
+        node[key] = typeof current === 'string'
+          ? { name: current }
+          : current;
       } else if (typeof node[key] === 'object') {
-        dualFormatDefined(node[key]);
+        normalizeDefinedTypes(node[key]);
       }
     }
   }
-  dualFormatDefined(idl);
+  normalizeDefinedTypes(idl);
+
+  for (const instruction of idl.instructions) {
+    if (!instruction.discriminator) {
+      instruction.discriminator = Array.from(
+        crypto.createHash('sha256').update(`global:${instruction.name}`).digest().subarray(0, 8)
+      );
+    }
+  }
+  for (const event of (idl.events || [])) {
+    if (!event.discriminator) {
+      event.discriminator = Array.from(
+        crypto.createHash('sha256').update(`event:${event.name}`).digest().subarray(0, 8)
+      );
+    }
+  }
+  for (const account of idl.accounts) {
+    if (!account.discriminator) {
+      account.discriminator = Array.from(
+        crypto.createHash('sha256').update(`account:${account.name}`).digest().subarray(0, 8)
+      );
+    }
+  }
 
   return idl;
 }
