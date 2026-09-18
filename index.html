@@ -234,9 +234,8 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
     <button class="bot-btn" id="bot-halt-btn" onclick="toggleBotHalt()" title="Emergency stop on backend bot">Halt</button>
     <button class="bot-btn" onclick="testBotPing()" title="Send test ping to bot">⚡ Bot Ping</button>
     <button class="bot-btn" onclick="testRpcConnection()" title="Test Solana RPC connection">⚡ RPC Ping</button>
-    <button class="bot-btn" id="tg-btn" onclick="promptTelegramConfig()" title="Configure and test Telegram alerts">✈️ Telegram</button>
+    <button class="bot-btn" id="tg-btn" onclick="testTelegramAlert()" title="Test backend Telegram alerts">✈️ Telegram</button>
     <button class="bot-btn cfg" onclick="promptRpcApiConfig()" title="Configure Solana RPC, Network, and Bot API">⚙️ RPC &amp; API</button>
-    <a href="/jupiter.js" download="jupiter.js" class="bot-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;" title="Download fixed Anchor-based jupiter.js">💾 jupiter.js</a>
   </div>
 </div>
 
@@ -548,8 +547,6 @@ Cycle rule: Half of balance is compounded, readded to make new balance, then cyc
 <script>
 window.DASHBOARD_CONFIG = window.DASHBOARD_CONFIG || {};
 </script>
-<script src="config.js" onerror="console.warn('config.js not found')"></script>
-
 <script>
 /*
 State
@@ -577,7 +574,7 @@ function getAppConfig() {
     const defaults = {
         NETWORK: 'devnet',
         SOLANA_RPC_URL: 'https://api.devnet.solana.com',
-        BOT_URL: 'http://localhost:3001',
+        BOT_URL: window.location.origin === 'null' ? 'http://localhost:3001' : window.location.origin,
         BINANCE_API_URL: 'https://data-api.binance.vision',
         TELEGRAM_TOKEN: '',
         TELEGRAM_CHAT_ID: ''
@@ -588,8 +585,8 @@ function getAppConfig() {
         rpcUrl: localStorage.getItem('sol_rpc_url') || loaded.SOLANA_RPC_URL || defaults.SOLANA_RPC_URL,
         botUrl: localStorage.getItem('sol_bot_url') || loaded.BOT_URL || defaults.BOT_URL,
         binanceApi: localStorage.getItem('sol_binance_api') || loaded.BINANCE_API_URL || defaults.BINANCE_API_URL,
-        tgToken: localStorage.getItem('sol_tg_token') || loaded.TELEGRAM_TOKEN || defaults.TELEGRAM_TOKEN,
-        tgChatId: localStorage.getItem('sol_tg_chat_id') || loaded.TELEGRAM_CHAT_ID || defaults.TELEGRAM_CHAT_ID
+        tgToken: '',
+        tgChatId: ''
     };
 }
 
@@ -2284,61 +2281,25 @@ function showToast(title, body) {
 }
 
 function getTelegramConfig() {
-    return {
-        token: localStorage.getItem('sol_tg_token') || window.DASHBOARD_CONFIG?.TELEGRAM_TOKEN || '',
-        chatId: localStorage.getItem('sol_tg_chat_id') || window.DASHBOARD_CONFIG?.TELEGRAM_CHAT_ID || ''
-    };
+    return { configured: true };
 }
 
 function promptTelegramConfig() {
-    const cur = getTelegramConfig();
-    const token = prompt('Enter Telegram Bot Token (from @BotFather):', cur.token);
-    if (token === null) return;
-    const chatId = prompt('Enter Telegram Chat ID (e.g. 123456789 or @channel):', cur.chatId);
-    if (chatId === null) return;
-
-    localStorage.setItem('sol_tg_token', token.trim());
-    localStorage.setItem('sol_tg_chat_id', chatId.trim());
-    updateBotUI();
-
-    if (token.trim() && chatId.trim()) {
-        const testNow = confirm('Telegram credentials saved!\n\nWould you like to send a test ping to your Telegram chat now?');
-        if (testNow) testTelegramAlert();
-    } else {
-        showToast('Telegram Config', 'Credentials cleared.');
-    }
+    testTelegramAlert();
 }
 
 async function testTelegramAlert() {
-    const cfg = getTelegramConfig();
-    if (!cfg.token || !cfg.chatId) {
-        alert('Please enter both Telegram Bot Token and Chat ID first.');
-        promptTelegramConfig();
-        return;
-    }
     showToast('✈️ Telegram', 'Sending test ping to Telegram...');
     try {
-        const title = '🟩 REVERSAL SNIPER TEST';
-        const body = `🎯 <b>SOL/USDT Telegram Alerts Connected!</b>\n` +
-                     `Time: ${new Date().toLocaleTimeString()}\n` +
-                     `Status: Active & ready for live sniper signals.`;
-        const res = await fetch(`https://api.telegram.org/bot${cfg.token}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: cfg.chatId,
-                text: `<b>${title}</b>\n${body}`,
-                parse_mode: 'HTML'
-            })
-        });
+        const res = await fetch(`${getBotUrl()}/telegram/test`, { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
             showToast('✅ Telegram Success', 'Test alert received in Telegram!');
             alert('✅ Success! Test message received in your Telegram.');
         } else {
-            const desc = data.description || 'Unknown error';
+            const desc = data.error || 'Unknown error';
             showToast('❌ Telegram Error', desc);
-            alert(`Telegram API Error (HTTP ${data.error_code}): ${desc}\n\nTroubleshooting:\n• If "chat not found": You must open your bot in Telegram and click START (/start) first.\n• If "Unauthorized": Verify your Bot Token from @BotFather.`);
+            alert(`Telegram backend error: ${desc}`);
         }
     } catch(err) {
         showToast('❌ Network Error', err.message);
@@ -2347,26 +2308,19 @@ async function testTelegramAlert() {
 }
 
 async function sendTelegram(title, body, signal) {
-    const cfg = getTelegramConfig();
-    if (!cfg.token || !cfg.chatId) {
-        console.warn('[Telegram] No Bot Token or Chat ID configured. Click "✈️ Telegram" to setup.');
-        return;
-    }
-    const text = `<b>${title}</b>\n${body}`;
     try {
-        const res = await fetch(`https://api.telegram.org/bot${cfg.token}/sendMessage`, {
+        const res = await fetch(`${getBotUrl()}/telegram`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                chat_id: cfg.chatId,
-                text,
-                parse_mode: 'HTML'
+                title,
+                body
             })
         });
         const data = await res.json();
         if (!data.ok) {
-            console.error('[Telegram Error]', data.error_code, data.description);
-            showToast('Telegram Error', `${data.description} (${data.error_code})`);
+            console.error('[Telegram Error]', data.error);
+            showToast('Telegram Error', data.error || 'Backend rejected alert');
         } else {
             console.log('[Telegram Alert Sent]', title);
         }

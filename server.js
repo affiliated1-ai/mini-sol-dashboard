@@ -388,7 +388,6 @@ app.use(cors({ origin: true }));
 app.use(express.json());
 
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-app.get('/config.js', (_req, res) => res.sendFile(path.join(__dirname, 'config.js')));
 
 app.post('/telegram/test', async (_req, res) => {
   try {

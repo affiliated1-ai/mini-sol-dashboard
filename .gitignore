@@ -5,6 +5,7 @@ wallet-devnet.json
 
 # Secrets
 .env
+config.js
 
 # Bot state (regenerates on start)
 state.json
