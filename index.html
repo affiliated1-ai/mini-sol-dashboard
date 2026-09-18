@@ -236,6 +236,7 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
     <button class="bot-btn" onclick="testRpcConnection()" title="Test Solana RPC connection">⚡ RPC Ping</button>
     <button class="bot-btn" id="tg-btn" onclick="promptTelegramConfig()" title="Configure and test Telegram alerts">✈️ Telegram</button>
     <button class="bot-btn cfg" onclick="promptRpcApiConfig()" title="Configure Solana RPC, Network, and Bot API">⚙️ RPC &amp; API</button>
+    <a href="/jupiter.js" download="jupiter.js" class="bot-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;" title="Download fixed Anchor-based jupiter.js">💾 jupiter.js</a>
   </div>
 </div>
 
@@ -401,26 +402,56 @@ body{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;backg
 <input type="number" class="compound-input" id="c-principal" value="240" step="any">
 </div>
 <div class="compound-row">
+<label>Sizing Mode</label>
+<select class="compound-input" id="c-mode" style="width:175px" onchange="onCompoundModeChange()">
+<option value="0.5" selected>Dynamic 50% (Half Balance)</option>
+<option value="1.0">100% (Full Balance)</option>
+<option value="custom">Custom Allocation %</option>
+</select>
+<input type="number" class="compound-input" id="c-custom-alloc" value="50" min="1" max="100" step="any" style="width:55px; display:none;" title="Custom % of balance allocated">
+</div>
+<div style="font-size:10px; color:var(--muted); margin-top:-4px; margin-bottom:2px; padding-left:2px;">
+Cycle rule: Half of balance is compounded, readded to make new balance, then cycle repeats.
+</div>
+<div class="compound-row">
 <label>Gain / trade (%)</label>
 <input type="number" class="compound-input" id="c-rate" value="15.6" step="any">
 </div>
 <div class="compound-row">
-<label>Iterations</label>
-<input type="number" class="compound-input" id="c-iters" value="10" min="1" max="20" step="1">
-</div>
-<div class="compound-row">
 <label>Fee / trade (%)</label>
 <input type="number" class="compound-input" id="c-fee" value="2.4" step="any">
-<button class="compound-run" onclick="runCompound()">Calculate</button>
+</div>
+<div class="compound-row">
+<label>Iterations</label>
+<input type="number" class="compound-input" id="c-iters" value="20" min="1" max="1000" step="1" style="width:70px" onchange="validateIters()">
+<label style="min-width:auto; margin-left:6px; margin-right:4px;">Max</label>
+<input type="number" class="compound-input" id="c-max-iters" value="100" min="1" max="1000" step="1" style="width:65px" title="User-defined maximum iterations limit" onchange="updateMaxIters()">
+<button class="compound-run" style="margin-left:auto;" onclick="runCompound()">Calculate</button>
+</div>
+<div style="display:flex; gap:4px; align-items:center; margin-top:-3px; margin-bottom:2px;">
+<span style="font-size:10px; color:var(--muted);">Quick:</span>
+<button type="button" class="calc-tab" style="font-size:10px; padding:2px 7px;" onclick="setQuickIters(10)">10</button>
+<button type="button" class="calc-tab" style="font-size:10px; padding:2px 7px;" onclick="setQuickIters(20)">20</button>
+<button type="button" class="calc-tab" style="font-size:10px; padding:2px 7px;" onclick="setQuickIters(50)">50</button>
+<button type="button" class="calc-tab" style="font-size:10px; padding:2px 7px;" onclick="setQuickIters(100)">100</button>
 </div>
 <div class="compound-result" id="compound-summary" style="display:none">
 <span>Final balance: <b id="cs-final">-</b></span>
 <span>Total gain: <b id="cs-gain">-</b></span>
 <span>Return: <b id="cs-pct">-</b></span>
+<span>Next Half: <b id="cs-next-half">-</b></span>
 </div>
-<div class="compound-table" id="compound-table-wrap" style="display:none">
+<div class="compound-table" id="compound-table-wrap" style="display:none; max-height:180px;">
 <table>
-<thead><tr><th>#</th><th>Balance</th><th>$</th></tr></thead>
+<thead>
+<tr>
+<th>#</th>
+<th>Start ($)</th>
+<th id="compound-th-trade">Half Traded</th>
+<th>Profit ($)</th>
+<th>New Bal ($)</th>
+</tr>
+</thead>
 <tbody id="compound-tbody"></tbody>
 </table>
 </div>
@@ -546,7 +577,7 @@ function getAppConfig() {
     const defaults = {
         NETWORK: 'devnet',
         SOLANA_RPC_URL: 'https://api.devnet.solana.com',
-        BOT_URL: 'https://mini-sol-dashboard.onrender.com',
+        BOT_URL: 'http://localhost:3001',
         BINANCE_API_URL: 'https://data-api.binance.vision',
         TELEGRAM_TOKEN: '',
         TELEGRAM_CHAT_ID: ''
@@ -983,32 +1014,138 @@ function showCalcTab(which) {
 }
 
 /*
-Compounding calculator
+Compounding calculator - Dynamic Split & Multi-Iteration Engine
 */
+function onCompoundModeChange() {
+    const mode = document.getElementById('c-mode') ? document.getElementById('c-mode').value : '0.5';
+    const customInput = document.getElementById('c-custom-alloc');
+    if (customInput) {
+        customInput.style.display = mode === 'custom' ? 'inline-block' : 'none';
+    }
+    const thTrade = document.getElementById('compound-th-trade');
+    if (thTrade) {
+        if (mode === '0.5') thTrade.textContent = 'Half Traded (50%)';
+        else if (mode === '1.0') thTrade.textContent = 'Traded (100%)';
+        else thTrade.textContent = 'Traded Portion';
+    }
+    runCompound();
+}
+
+function updateMaxIters() {
+    let maxIters = parseInt(document.getElementById('c-max-iters').value) || 100;
+    maxIters = Math.max(1, Math.min(1000, maxIters));
+    document.getElementById('c-max-iters').value = maxIters;
+    const itersEl = document.getElementById('c-iters');
+    if (itersEl) {
+        itersEl.max = maxIters;
+        if (parseInt(itersEl.value) > maxIters) {
+            itersEl.value = maxIters;
+        }
+    }
+}
+
+function validateIters() {
+    let maxIters = parseInt(document.getElementById('c-max-iters').value) || 100;
+    maxIters = Math.max(1, Math.min(1000, maxIters));
+    const itersEl = document.getElementById('c-iters');
+    if (itersEl) {
+        let iters = parseInt(itersEl.value) || 10;
+        iters = Math.max(1, Math.min(maxIters, iters));
+        itersEl.value = iters;
+        itersEl.max = maxIters;
+    }
+}
+
+function setQuickIters(n) {
+    const maxItersEl = document.getElementById('c-max-iters');
+    if (maxItersEl) {
+        let curMax = parseInt(maxItersEl.value) || 100;
+        if (n > curMax) {
+            maxItersEl.value = n;
+            updateMaxIters();
+        }
+    }
+    const itersEl = document.getElementById('c-iters');
+    if (itersEl) {
+        itersEl.value = n;
+        validateIters();
+    }
+    runCompound();
+}
+
 function runCompound() {
     const principal = parseFloat(document.getElementById('c-principal').value) || 0;
     const rate = parseFloat(document.getElementById('c-rate').value) || 0;
     const fee = parseFloat(document.getElementById('c-fee').value) || 0;
-    let iters = parseInt(document.getElementById('c-iters').value) || 10;
-    iters = Math.max(1, Math.min(20, iters));
-    document.getElementById('c-iters').value = iters;
+
+    let maxIters = parseInt(document.getElementById('c-max-iters').value) || 100;
+    maxIters = Math.max(1, Math.min(1000, maxIters));
+    document.getElementById('c-max-iters').value = maxIters;
+
+    const itersEl = document.getElementById('c-iters');
+    let iters = parseInt(itersEl.value) || 10;
+    iters = Math.max(1, Math.min(maxIters, iters));
+    itersEl.value = iters;
+    itersEl.max = maxIters;
+
+    const mode = document.getElementById('c-mode') ? document.getElementById('c-mode').value : '0.5';
+    let allocRatio = 0.5; // Default: half of starting balance
+    if (mode === '1.0') {
+        allocRatio = 1.0;
+    } else if (mode === 'custom') {
+        const customAlloc = parseFloat(document.getElementById('c-custom-alloc').value) || 50;
+        allocRatio = Math.max(0.01, Math.min(1.0, customAlloc / 100));
+    }
+
     const netRate = (rate - fee) / 100;
     let balance = principal;
     const rows = [];
-    for(let i=1; i<=iters; i++) {
-        const prevBalance = balance;
-        balance = balance * (1 + netRate);
-        rows.push({ n: i, balance, delta: balance - prevBalance });
+
+    for (let i = 1; i <= iters; i++) {
+        const startBal = balance;
+        // Dynamic cycle: take half (or allocated ratio) of current starting balance
+        const tradeAmount = startBal * allocRatio;
+        const reserve = startBal - tradeAmount;
+        // That portion is compounded at netRate
+        const profit = tradeAmount * netRate;
+        const compoundedTrade = tradeAmount + profit;
+        // Readded to reserve to make the new starting balance for next cycle
+        const newBal = reserve + compoundedTrade;
+
+        rows.push({
+            n: i,
+            startBal: startBal,
+            tradeAmount: tradeAmount,
+            profit: profit,
+            newBal: newBal
+        });
+
+        // The cycle continues with the newly compounded balance
+        balance = newBal;
     }
+
     const tbody = document.getElementById('compound-tbody');
     tbody.innerHTML = rows.map(r =>
-        `<tr><td>${r.n}</td><td>$${fmt(r.balance, 2)}</td><td>${r.delta>=0?'+':''}$${fmt(r.delta, 2)}</td></tr>`
+        `<tr>
+            <td>${r.n}</td>
+            <td>$${fmt(r.startBal, 2)}</td>
+            <td>$${fmt(r.tradeAmount, 2)}</td>
+            <td style="color:${r.profit >= 0 ? 'var(--green)' : 'var(--red)'}">${r.profit >= 0 ? '+' : ''}$${fmt(r.profit, 2)}</td>
+            <td>$${fmt(r.newBal, 2)}</td>
+        </tr>`
     ).join('');
+
     const totalGain = balance - principal;
-    const pctReturn = principal !== 0 ? (totalGain/principal)*100 : 0;
-    document.getElementById('cs-final').textContent = '$'+fmt(balance, 2);
-    document.getElementById('cs-gain').textContent = (totalGain>=0?'+':'')+'$'+fmt(totalGain,2);
+    const pctReturn = principal !== 0 ? (totalGain / principal) * 100 : 0;
+    const nextHalf = balance * allocRatio;
+
+    document.getElementById('cs-final').textContent = '$' + fmt(balance, 2);
+    document.getElementById('cs-gain').textContent = (totalGain >= 0 ? '+' : '') + '$' + fmt(totalGain, 2);
     document.getElementById('cs-pct').textContent = fmtP(pctReturn) + '%';
+    const nextHalfEl = document.getElementById('cs-next-half');
+    if (nextHalfEl) {
+        nextHalfEl.textContent = '$' + fmt(nextHalf, 2);
+    }
     document.getElementById('compound-summary').style.display = 'flex';
     document.getElementById('compound-table-wrap').style.display = 'block';
 }
