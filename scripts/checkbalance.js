@@ -1,12 +1,14 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const readline = require('readline');
-const { Keypair } = require('@solana/web3.js');
+const { Connection, Keypair, LAMPORTS_PER_SOL } = require('@solana/web3.js');
 
-// CLI Arguments: node testpass.js [walletFile] [passphrase]
+// CLI Arguments: node checkbalance.js [walletFile] [passphrase] [network]
 const walletFile = process.argv[2] || './wallet-mainnet.json';
 const cliPassphrase = process.argv[3];
+const network = process.argv[4] || 'mainnet-beta';
 
+// Secure interactive prompt if passphrase argument is omitted
 function getPassphrase(providedPassphrase) {
   if (providedPassphrase) return Promise.resolve(providedPassphrase);
 
@@ -27,58 +29,61 @@ function getPassphrase(providedPassphrase) {
 
     rl.question('Enter wallet passphrase: ', (input) => {
       rl.close();
-      console.log('');
+      console.log(''); // Add newline after hitting Enter
       resolve(input.trim());
     });
   });
 }
 
-async function testPassphrase() {
+async function checkBalance() {
   try {
     if (!fs.existsSync(walletFile)) {
       throw new Error(`Wallet file not found at: ${walletFile}`);
     }
 
+    // 1. Get Passphrase (from CLI or Interactive Prompt)
     const passphrase = await getPassphrase(cliPassphrase);
 
     if (!passphrase) {
       throw new Error('Passphrase cannot be empty.');
     }
 
-    // 1. Read encrypted wallet JSON
+    // 2. Read encrypted wallet file
     const fileData = JSON.parse(fs.readFileSync(walletFile, 'utf8'));
 
-    if (!fileData.salt || !fileData.iv || !fileData.encryptedData) {
-      throw new Error('File structure is invalid or unencrypted raw array.');
-    }
-
-    // 2. Extract salt & IV
+    // 3. Derive key and decrypt
     const salt = Buffer.from(fileData.salt, 'hex');
     const iv = Buffer.from(fileData.iv, 'hex');
-
-    // 3. Derive key with PBKDF2
     const key = crypto.pbkdf2Sync(passphrase, salt, 100000, 32, 'sha256');
 
-    // 4. Decrypt AES payload
     const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
     let decrypted = decipher.update(fileData.encryptedData, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
 
-    // 5. Parse keypair and derive public address
+    // 4. Get Public Address
     const secretKey = Uint8Array.from(JSON.parse(decrypted));
     const keypair = Keypair.fromSecretKey(secretKey);
+    const pubkey = keypair.publicKey;
+
+    // 5. Connect to RPC
+    const rpcUrl = network === 'devnet'
+      ? 'https://api.devnet.solana.com'
+      : 'https://api.mainnet-beta.solana.com';
+
+    const connection = new Connection(rpcUrl, 'confirmed');
+    const balance = await connection.getBalance(pubkey);
 
     console.log('==================================================');
-    console.log('✅ PASS! Passphrase is valid.');
-    console.log(`🔑 Public Address: ${keypair.publicKey.toBase58()}`);
+    console.log(`🔑 Public Address: ${pubkey.toBase58()}`);
+    console.log(`🌐 Network:        ${network}`);
+    console.log(`💰 SOL Balance:    ${balance / LAMPORTS_PER_SOL} SOL`);
     console.log('==================================================');
   } catch (err) {
     console.log('==================================================');
-    console.error('❌ FAIL! Invalid passphrase or corrupted file.');
-    console.log(`Details: ${err.message}`);
+    console.error('❌ Error:', err.message);
     console.log('==================================================');
     process.exit(1);
   }
 }
 
-testPassphrase();
+checkBalance();
