@@ -112,6 +112,40 @@ function getCollateralCustody(asset, side) {
 
 // -- Wallet --------------------------------------------------------
 let _kp = null;
+function parseSecretKeyFromText(rawText) {
+  const text = (rawText || '').trim();
+  if (!text) {
+    throw new Error('Wallet file is empty.');
+  }
+
+  if (text.startsWith('[') && text.endsWith(']')) {
+    return Uint8Array.from(JSON.parse(text));
+  }
+
+  let parsed = null;
+  try { parsed = JSON.parse(text); } catch (_) {}
+
+  if (Array.isArray(parsed)) {
+    return Uint8Array.from(parsed);
+  }
+
+  if (parsed && typeof parsed.privateKey === 'string') {
+    try {
+      const bs58 = require('bs58');
+      return bs58.decode(parsed.privateKey);
+    } catch (_) {
+      return Buffer.from(parsed.privateKey, 'hex');
+    }
+  }
+
+  try {
+    const bs58 = require('bs58');
+    return bs58.decode(text);
+  } catch (_) {
+    return Buffer.from(text, 'hex');
+  }
+}
+
 function getKeypair() {
   if (_kp) return _kp;
   if (!fs.existsSync(KEYPAIR_PATH)) {
@@ -130,29 +164,33 @@ function getKeypair() {
   }
   try {
     const fileContent = fs.readFileSync(KEYPAIR_PATH, 'utf8').trim();
-    if (fileContent.startsWith('[') && fileContent.endsWith(']')) {
-      _kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fileContent)));
-    } else {
-      let parsed = null;
-      try { parsed = JSON.parse(fileContent); } catch (_) {}
-      if (Array.isArray(parsed)) {
-        _kp = Keypair.fromSecretKey(Uint8Array.from(parsed));
-      } else if (parsed && typeof parsed.privateKey === 'string') {
-        try {
-          const bs58 = require('bs58');
-          _kp = Keypair.fromSecretKey(bs58.decode(parsed.privateKey));
-        } catch (_) {
-          _kp = Keypair.fromSecretKey(Buffer.from(parsed.privateKey, 'hex'));
-        }
-      } else {
-        try {
-          const bs58 = require('bs58');
-          _kp = Keypair.fromSecretKey(bs58.decode(fileContent));
-        } catch (_) {
-          _kp = Keypair.fromSecretKey(Buffer.from(fileContent, 'hex'));
-        }
+    let parsed = null;
+    try { parsed = JSON.parse(fileContent); } catch (_) {}
+
+    if (parsed && typeof parsed === 'object' && typeof parsed.encryptedData === 'string') {
+      const passphrase = process.env.KEYPAIR_PASSPHRASE ||
+        process.env.WALLET_PASSPHRASE ||
+        process.env.KEYPAIR_PASSWORD ||
+        process.env.WALLET_PASSWORD;
+
+      if (!passphrase) {
+        throw new Error(
+          `Encrypted wallet detected at ${KEYPAIR_PATH}. Set KEYPAIR_PASSPHRASE=<passphrase> in .env before starting the bot. ` +
+          `If you do not have the passphrase, regenerate the wallet with: node scripts/newwallet.js wallet.json <passphrase>`
+        );
       }
+
+      const salt = Buffer.from(parsed.salt || '', 'hex');
+      const iv = Buffer.from(parsed.iv || '', 'hex');
+      const key = crypto.pbkdf2Sync(passphrase, salt, 100000, 32, 'sha256');
+      const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+      let decrypted = decipher.update(parsed.encryptedData, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      _kp = Keypair.fromSecretKey(parseSecretKeyFromText(decrypted));
+    } else {
+      _kp = Keypair.fromSecretKey(parseSecretKeyFromText(fileContent));
     }
+
     log(`[${NETWORK}] Wallet: ${_kp.publicKey.toBase58().slice(0, 10)}...`);
     return _kp;
   } catch (err) {
