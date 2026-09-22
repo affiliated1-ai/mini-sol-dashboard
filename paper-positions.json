@@ -1,1 +1,34 @@
-{}
+{
+  "paper_SOL_Long_1790039975233": {
+    "id": "paper_SOL_Long_1790039975233",
+    "asset": "SOL",
+    "side": "Long",
+    "marginUSDC": 30,
+    "limitPrice": 139.9125,
+    "leverage": 40,
+    "sizeUsd": 1200,
+    "stopLoss": 139.3875,
+    "takeProfit": 140.6625,
+    "positionPDA": "4deYrJHEMDm8FPX6sNnzta6456pEnL9VTcD2v1tubbsW",
+    "requestPDA": "2Y9DfHXkSzsbuksahgSqJqhkxr4Q7fk931mMshxe1n7N",
+    "status": "closed",
+    "openedAt": 1790039975233,
+    "closedAt": 1790042143157
+  },
+  "paper_SOL_Short_1790041874403": {
+    "id": "paper_SOL_Short_1790041874403",
+    "asset": "SOL",
+    "side": "Short",
+    "marginUSDC": 30,
+    "limitPrice": 142.5875,
+    "leverage": 40,
+    "sizeUsd": 1200,
+    "stopLoss": 143.1125,
+    "takeProfit": 141.8375,
+    "positionPDA": "AqWHSZJucQS7fU4WGSWtPkDH58nkqKrHQXUKetqd5V6i",
+    "requestPDA": "5tQmNzCmDXqcMVMLoCttDnKB1TKwcCHmDN2pEntPyrDj",
+    "status": "closed",
+    "openedAt": 1790041874403,
+    "closedAt": 1790042143724
+  }
+}
