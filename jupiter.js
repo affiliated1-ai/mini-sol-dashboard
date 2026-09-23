@@ -246,38 +246,6 @@ function parseKeypairFromInput(input) {
   throw new Error('Unsupported wallet keypair format. Provide a 32-byte seed or 64-byte secret key (as JSON array, Base58 string, or object).');
 }
 
-function parseEncryptedWallet(fileContent, walletPath) {
-  let fileData;
-  try {
-    fileData = JSON.parse(fileContent);
-  } catch (_) {
-    return null;
-  }
-
-  if (!fileData || !fileData.salt || !fileData.iv || !fileData.encryptedData) {
-    return null;
-  }
-
-  const passphrase = process.env.KEYPAIR_PASSPHRASE;
-  if (!passphrase) {
-    throw new Error(
-      `Wallet file ${walletPath} is encrypted. Set KEYPAIR_PASSPHRASE in .env before starting the server.`
-    );
-  }
-
-  try {
-    const salt = Buffer.from(fileData.salt, 'hex');
-    const iv = Buffer.from(fileData.iv, 'hex');
-    const key = crypto.pbkdf2Sync(passphrase, salt, 100000, 32, 'sha256');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-    let decrypted = decipher.update(fileData.encryptedData, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return parseKeypairFromInput(decrypted);
-  } catch (err) {
-    throw new Error(`Could not decrypt wallet file ${walletPath}: ${err.message}`);
-  }
-}
-
 // -- Wallet --------------------------------------------------------
 let _kp = null;
 function getKeypair() {
@@ -312,7 +280,7 @@ function getKeypair() {
 
   try {
     const fileContent = fs.readFileSync(activeKeypairPath, 'utf8').trim();
-    _kp = parseEncryptedWallet(fileContent, activeKeypairPath) || parseKeypairFromInput(fileContent);
+    _kp = parseKeypairFromInput(fileContent);
     log(`[${NETWORK}] âœ… Loaded Mainnet Keypair from: ${activeKeypairPath}`);
     log(`[${NETWORK}] Wallet Public Key: ${_kp.publicKey.toBase58()}`);
     return _kp;
@@ -611,14 +579,6 @@ function createMinimalJupiterIdl() {
     { name: 'counter', type: 'u64' },
     { name: 'jupiterMinimumOut', type: { option: 'u64' } },
   ];
-  const createIncreasePositionMarketParamsFields = [
-    { name: 'sizeUsdDelta', type: 'u64' },
-    { name: 'collateralTokenDelta', type: 'u64' },
-    { name: 'side', type: { defined: 'Side' } },
-    { name: 'priceSlippage', type: 'u64' },
-    { name: 'jupiterMinimumOut', type: { option: 'u64' } },
-    { name: 'counter', type: 'u64' },
-  ];
 
   return {
     version: '0.1.0',
@@ -630,6 +590,7 @@ function createMinimalJupiterIdl() {
         accounts: [
           { name: 'owner', isMut: false, isSigner: true },
           { name: 'fundingAccount', isMut: true, isSigner: false, isWritable: true },
+          { name: 'receivingAccount', isMut: true, isSigner: false, isOptional: true, isWritable: true },
           { name: 'perpetuals', isMut: true, isSigner: false, isWritable: true },
           { name: 'pool', isMut: true, isSigner: false, isWritable: true },
           { name: 'position', isMut: true, isSigner: false, isWritable: true },
@@ -766,7 +727,7 @@ function createMinimalJupiterIdl() {
       },
       {
         name: 'CreateIncreasePositionMarketRequestParams',
-        type: { kind: 'struct', fields: createIncreasePositionMarketParamsFields },
+        type: { kind: 'struct', fields: coreParamsFields },
       },
       {
         name: 'createIncreasePositionMarketRequestParams',
@@ -870,17 +831,26 @@ function getProgram() {
 // -- PDA derivation ------------------------------------------------
 /**
  * Derives the Position PDA using Jupiter's exact on-chain seeds:
- * [b"position", owner, pool, custody, collateral_custody, side]
+ * [b"position", owner, pool, custody, Buffer.from([sideByte])]
+ * sideByte: 1 for Long, 2 for Short
  */
-function derivePositionPDA(owner, pool, custody, collateralCustody) {
+function derivePositionPDA(owner, pool, custody, sideOrCollateral, explicitSide) {
+  let sideVal = explicitSide !== undefined ? explicitSide : sideOrCollateral;
+  let sideByte = 1;
+  if (typeof sideVal === 'number') {
+    sideByte = sideVal;
+  } else if (typeof sideVal === 'string') {
+    const s = sideVal.toLowerCase();
+    sideByte = (s === 'long' || s === 'green' || s === 'buy') ? 1 : 2;
+  }
+
   return PublicKey.findProgramAddressSync(
     [
       Buffer.from('position'),
       owner.toBuffer(),
       pool.toBuffer(),
       custody.toBuffer(),
-      collateralCustody.toBuffer(),
-      Buffer.from([0]), // Position::None before the request is executed.
+      Buffer.from([sideByte]),
     ],
     PERP_PROGRAM_ID
   );
@@ -888,11 +858,12 @@ function derivePositionPDA(owner, pool, custody, collateralCustody) {
 
 /**
  * Derives the PositionRequest PDA:
- * [b"position_request", position, counter (u64 LE)]
+ * [b"position_request", position, counter (u64 LE Buffer)]
  */
 function derivePositionRequestPDA(positionPubkey, counter) {
+  const counterBigInt = BigInt(counter !== undefined ? counter : 1);
   const counterBuf = Buffer.alloc(8);
-  counterBuf.writeBigUInt64LE(BigInt(counter));
+  counterBuf.writeBigUInt64LE(counterBigInt, 0);
   return PublicKey.findProgramAddressSync(
     [
       Buffer.from('position_request'),
@@ -936,7 +907,7 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
   const collateralMint    = getCollateralMint(assetClean, normSide);
 
   // 1. Correct Position PDA
-  const [positionPDA] = derivePositionPDA(owner, JLP_POOL, custody, collateralCustody);
+  const [positionPDA] = derivePositionPDA(owner, JLP_POOL, custody, collateralCustody, normSide);
 
   // 2. PositionRequest PDA
   const counter = Date.now() % 2**32;
@@ -986,14 +957,11 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
 
     // Locate instruction in loaded IDL
     const availableIxNames = program.idl.instructions.map(i => i.name);
-    const preferredIxNames = [
-      'createIncreasePositionMarketRequest',
-      'create_increase_position_market_request',
-      'openPositionRequest',
-    ];
-    let targetIxName = preferredIxNames.find(name => availableIxNames.includes(name));
-    if (!targetIxName) {
-      targetIxName = availableIxNames.find(n =>
+    let targetIxName = 'openPositionRequest';
+    if (!availableIxNames.includes(targetIxName)) {
+      targetIxName = availableIxNames.find(n => 
+        n === 'createIncreasePositionMarketRequest' ||
+        n === 'create_increase_position_market_request' ||
         n.toLowerCase().includes('increaseposition') ||
         n.toLowerCase().includes('openposition')
       ) || availableIxNames[0];
@@ -1240,15 +1208,6 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
       tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: DEFAULT_PRIORITY_FEE }));
       tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: DEFAULT_COMPUTE_UNITS }));
 
-      tx.add(
-        createAssociatedTokenAccountIdempotentInstruction(
-          owner,
-          positionRequestATA,
-          positionRequestPDA,
-          collateralMint
-        )
-      );
-
       // If using SOL collateral, auto-create WSOL ATA and wrap native SOL
       if (isSolCollateral) {
         tx.add(
@@ -1291,8 +1250,7 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
               log(`[SIMULATION LOGS]:\n` + sim.value.logs.slice(-10).join('\n'));
             }
             if (!isPaper) {
-              const logs = sim.value.logs ? ` Logs: ${sim.value.logs.slice(-10).join(' | ')}` : '';
-              throw new Error(`Simulation failed on-chain: ${JSON.stringify(sim.value.err)}.${logs}`);
+              throw new Error(`Simulation failed on-chain: ${JSON.stringify(sim.value.err)}`);
             }
           } else {
             log(`[${NETWORK}] âœ… [APPROACH B SIMULATION PASSED!]`);
@@ -1994,6 +1952,8 @@ module.exports = {
   getPaperPositions,
   clearPaperPositions,
   getProgram,
+  derivePositionPDA,
+  derivePositionRequestPDA,
   repairAndSanitizeIdl,
   createMinimalJupiterIdl,
   KEYPAIR_PATH,
