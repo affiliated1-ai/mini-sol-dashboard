@@ -611,6 +611,14 @@ function createMinimalJupiterIdl() {
     { name: 'counter', type: 'u64' },
     { name: 'jupiterMinimumOut', type: { option: 'u64' } },
   ];
+  const createIncreasePositionMarketParamsFields = [
+    { name: 'sizeUsdDelta', type: 'u64' },
+    { name: 'collateralTokenDelta', type: 'u64' },
+    { name: 'side', type: { defined: 'Side' } },
+    { name: 'priceSlippage', type: 'u64' },
+    { name: 'jupiterMinimumOut', type: { option: 'u64' } },
+    { name: 'counter', type: 'u64' },
+  ];
 
   return {
     version: '0.1.0',
@@ -622,7 +630,6 @@ function createMinimalJupiterIdl() {
         accounts: [
           { name: 'owner', isMut: false, isSigner: true },
           { name: 'fundingAccount', isMut: true, isSigner: false, isWritable: true },
-          { name: 'receivingAccount', isMut: true, isSigner: false, isOptional: true, isWritable: true },
           { name: 'perpetuals', isMut: true, isSigner: false, isWritable: true },
           { name: 'pool', isMut: true, isSigner: false, isWritable: true },
           { name: 'position', isMut: true, isSigner: false, isWritable: true },
@@ -759,7 +766,7 @@ function createMinimalJupiterIdl() {
       },
       {
         name: 'CreateIncreasePositionMarketRequestParams',
-        type: { kind: 'struct', fields: coreParamsFields },
+        type: { kind: 'struct', fields: createIncreasePositionMarketParamsFields },
       },
       {
         name: 'createIncreasePositionMarketRequestParams',
@@ -863,7 +870,7 @@ function getProgram() {
 // -- PDA derivation ------------------------------------------------
 /**
  * Derives the Position PDA using Jupiter's exact on-chain seeds:
- * [b"position", owner, pool, custody, collateral_custody]
+ * [b"position", owner, pool, custody, collateral_custody, side]
  */
 function derivePositionPDA(owner, pool, custody, collateralCustody) {
   return PublicKey.findProgramAddressSync(
@@ -873,6 +880,7 @@ function derivePositionPDA(owner, pool, custody, collateralCustody) {
       pool.toBuffer(),
       custody.toBuffer(),
       collateralCustody.toBuffer(),
+      Buffer.from([0]), // Position::None before the request is executed.
     ],
     PERP_PROGRAM_ID
   );
@@ -978,11 +986,14 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
 
     // Locate instruction in loaded IDL
     const availableIxNames = program.idl.instructions.map(i => i.name);
-    let targetIxName = 'openPositionRequest';
-    if (!availableIxNames.includes(targetIxName)) {
-      targetIxName = availableIxNames.find(n => 
-        n === 'createIncreasePositionMarketRequest' ||
-        n === 'create_increase_position_market_request' ||
+    const preferredIxNames = [
+      'createIncreasePositionMarketRequest',
+      'create_increase_position_market_request',
+      'openPositionRequest',
+    ];
+    let targetIxName = preferredIxNames.find(name => availableIxNames.includes(name));
+    if (!targetIxName) {
+      targetIxName = availableIxNames.find(n =>
         n.toLowerCase().includes('increaseposition') ||
         n.toLowerCase().includes('openposition')
       ) || availableIxNames[0];
@@ -1229,6 +1240,15 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
       tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: DEFAULT_PRIORITY_FEE }));
       tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: DEFAULT_COMPUTE_UNITS }));
 
+      tx.add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          owner,
+          positionRequestATA,
+          positionRequestPDA,
+          collateralMint
+        )
+      );
+
       // If using SOL collateral, auto-create WSOL ATA and wrap native SOL
       if (isSolCollateral) {
         tx.add(
@@ -1271,7 +1291,8 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
               log(`[SIMULATION LOGS]:\n` + sim.value.logs.slice(-10).join('\n'));
             }
             if (!isPaper) {
-              throw new Error(`Simulation failed on-chain: ${JSON.stringify(sim.value.err)}`);
+              const logs = sim.value.logs ? ` Logs: ${sim.value.logs.slice(-10).join(' | ')}` : '';
+              throw new Error(`Simulation failed on-chain: ${JSON.stringify(sim.value.err)}.${logs}`);
             }
           } else {
             log(`[${NETWORK}] âœ… [APPROACH B SIMULATION PASSED!]`);
