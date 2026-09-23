@@ -246,6 +246,38 @@ function parseKeypairFromInput(input) {
   throw new Error('Unsupported wallet keypair format. Provide a 32-byte seed or 64-byte secret key (as JSON array, Base58 string, or object).');
 }
 
+function parseEncryptedWallet(fileContent, walletPath) {
+  let fileData;
+  try {
+    fileData = JSON.parse(fileContent);
+  } catch (_) {
+    return null;
+  }
+
+  if (!fileData || !fileData.salt || !fileData.iv || !fileData.encryptedData) {
+    return null;
+  }
+
+  const passphrase = process.env.KEYPAIR_PASSPHRASE;
+  if (!passphrase) {
+    throw new Error(
+      `Wallet file ${walletPath} is encrypted. Set KEYPAIR_PASSPHRASE in .env before starting the server.`
+    );
+  }
+
+  try {
+    const salt = Buffer.from(fileData.salt, 'hex');
+    const iv = Buffer.from(fileData.iv, 'hex');
+    const key = crypto.pbkdf2Sync(passphrase, salt, 100000, 32, 'sha256');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(fileData.encryptedData, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return parseKeypairFromInput(decrypted);
+  } catch (err) {
+    throw new Error(`Could not decrypt wallet file ${walletPath}: ${err.message}`);
+  }
+}
+
 // -- Wallet --------------------------------------------------------
 let _kp = null;
 function getKeypair() {
@@ -280,7 +312,7 @@ function getKeypair() {
 
   try {
     const fileContent = fs.readFileSync(activeKeypairPath, 'utf8').trim();
-    _kp = parseKeypairFromInput(fileContent);
+    _kp = parseEncryptedWallet(fileContent, activeKeypairPath) || parseKeypairFromInput(fileContent);
     log(`[${NETWORK}] âœ… Loaded Mainnet Keypair from: ${activeKeypairPath}`);
     log(`[${NETWORK}] Wallet Public Key: ${_kp.publicKey.toBase58()}`);
     return _kp;
