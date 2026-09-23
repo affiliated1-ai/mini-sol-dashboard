@@ -376,8 +376,9 @@ function repairAndSanitizeIdl(rawIdl) {
 
   for (const instruction of idl.instructions) {
     if (!instruction.discriminator) {
+      const rustName = instruction.name.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
       instruction.discriminator = Array.from(
-        crypto.createHash('sha256').update(`global:${instruction.name}`).digest().subarray(0, 8)
+        crypto.createHash('sha256').update(`global:${rustName}`).digest().subarray(0, 8)
       );
     }
   }
@@ -620,9 +621,9 @@ function getProgram() {
 // -- PDA derivation ------------------------------------------------
 /**
  * Derives the Position PDA using Jupiter's exact on-chain seeds:
- * [b"position", owner, pool, custody, collateral_custody]
+ * [b"position", owner, pool, custody, collateral_custody, side]
  */
-function derivePositionPDA(owner, pool, custody, collateralCustody) {
+function derivePositionPDA(owner, pool, custody, collateralCustody, side = 'Long') {
   return PublicKey.findProgramAddressSync(
     [
       Buffer.from('position'),
@@ -630,6 +631,7 @@ function derivePositionPDA(owner, pool, custody, collateralCustody) {
       pool.toBuffer(),
       custody.toBuffer(),
       collateralCustody.toBuffer(),
+      Buffer.from([side === 'Long' ? 1 : 2]),
     ],
     PERP_PROGRAM_ID
   );
@@ -647,6 +649,7 @@ function derivePositionRequestPDA(positionPubkey, counter) {
       Buffer.from('position_request'),
       positionPubkey.toBuffer(),
       counterBuf,
+      Buffer.from([1]), // Increase request enum variant.
     ],
     PERP_PROGRAM_ID
   );
@@ -678,7 +681,7 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
   const collateralMint    = getCollateralMint(assetClean, normSide);
 
   // 1. Correct Position PDA
-  const [positionPDA] = derivePositionPDA(owner, JLP_POOL, custody, collateralCustody);
+  const [positionPDA] = derivePositionPDA(owner, JLP_POOL, custody, collateralCustody, normSide);
 
   // 2. PositionRequest PDA
   const counter = Date.now() % 2**32;
@@ -708,6 +711,38 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
 
   const sizeUsdDeltaAtomic  = Math.round(marginUSDC * leverage * 1e6);
   const priceSlippageAtomic = Math.round(limitPrice * 1e6);
+
+  // The program expects the owner collateral account to already exist and be funded.
+  // Check it here so a missing ATA or empty balance is not reported as an opaque
+  // Jupiter custom error during simulation.
+  if (!isPaper) {
+    if (isSolCollateral) {
+      const nativeBalance = await connection.getBalance(owner, 'confirmed');
+      const feeReserve = 10_000_000; // Keep room for account rent and transaction fees.
+      if (nativeBalance < collateralDeltaAtomic + feeReserve) {
+        throw new Error(
+          `Insufficient SOL collateral: need about ${(collateralDeltaAtomic + feeReserve) / 1e9} SOL ` +
+          `including fees, wallet has ${nativeBalance / 1e9} SOL.`
+        );
+      }
+    } else {
+      const collateralAccount = await connection.getAccountInfo(traderCollateralATA, 'confirmed');
+      if (!collateralAccount) {
+        throw new Error(
+          `Collateral token account is missing: ${traderCollateralATA.toBase58()} ` +
+          `(mint ${collateralMint.toBase58()}). Fund the wallet or create the associated token account.`
+        );
+      }
+      const collateralBalance = await connection.getTokenAccountBalance(traderCollateralATA, 'confirmed');
+      const available = BigInt(collateralBalance.value.amount);
+      if (available < BigInt(collateralDeltaAtomic)) {
+        throw new Error(
+          `Insufficient collateral for ${assetClean} ${normSide}: need ${collateralDeltaAtomic} ` +
+          `base units of ${collateralMint.toBase58()}, wallet has ${available}.`
+        );
+      }
+    }
+  }
 
   log(`[${NETWORK}] placeLimitOrder (Anchor): ${normSide} ${assetClean} @ $${limitPrice} | Margin $${marginUSDC} | ${leverage}x`);
   if (isPaper)    log(`[${NETWORK}] Execution Mode: Approach A (Paper Trading) enabled`);
@@ -926,7 +961,10 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
               log(`[SIMULATION LOGS]:\n` + sim.value.logs.slice(-10).join('\n'));
             }
             if (!isPaper) {
-              throw new Error(`Simulation failed on-chain: ${JSON.stringify(sim.value.err)}`);
+              const logs = sim.value.logs && sim.value.logs.length
+                ? `\nSimulation logs:\n${sim.value.logs.join('\n')}`
+                : '';
+              throw new Error(`Simulation failed on-chain: ${JSON.stringify(sim.value.err)}${logs}`);
             }
           } else {
             log(`[${NETWORK}] âœ… [APPROACH B SIMULATION PASSED!]`);
@@ -1203,7 +1241,7 @@ async function cancelOrder(positionRequestPubkey) {
     const asset     = Object.entries(CUSTODY_ACCOUNTS).find(([,v]) => v.toBase58() === custody.toBase58())?.[0] || 'SOL';
 
     const collateralCustody = getCollateralCustody(asset, side);
-    const [positionPDA]     = derivePositionPDA(kp.publicKey, JLP_POOL, new PublicKey(custody), collateralCustody);
+    const [positionPDA]     = derivePositionPDA(kp.publicKey, JLP_POOL, new PublicKey(custody), collateralCustody, side);
     const collateralMint    = getCollateralMint(asset, side);
     const positionRequestATA = await getAssociatedTokenAddress(collateralMint, pk, true);
 
