@@ -228,7 +228,68 @@ function createKeypairFromBytes(bytes) {
   throw new Error(`Invalid secret key byte length: ${u8.length}. Expected 32-byte seed or 64-byte secret key.`);
 }
 
-function parseKeypairFromInput(input) {
+function getPassphraseFromEnv() {
+  const envPass = process.env.WALLET_PASSPHRASE ||
+    process.env.WALLET_PASSWORD ||
+    process.env.PASSPHRASE ||
+    process.env.KEYPAIR_PASSPHRASE ||
+    process.env.SOLANA_PASSPHRASE ||
+    process.env.SOLANA_WALLET_PASSWORD;
+
+  if (envPass && typeof envPass === 'string' && envPass.trim().length > 0) {
+    return envPass.trim();
+  }
+
+  // Check optional .passphrase file
+  try {
+    const pFile = path.resolve(process.cwd(), '.passphrase');
+    if (fs.existsSync(pFile)) {
+      return fs.readFileSync(pFile, 'utf8').trim();
+    }
+  } catch (_) {}
+
+  return null;
+}
+
+function isEncryptedWalletPayload(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  const hasSalt = typeof obj.salt === 'string' && obj.salt.length >= 16;
+  const hasIv = typeof obj.iv === 'string' && obj.iv.length >= 16;
+  const hasEncryptedData = typeof (obj.encryptedData || obj.ciphertext || obj.encrypted) === 'string';
+  return hasSalt && hasIv && hasEncryptedData;
+}
+
+function decryptWalletPayload(payload, passphrase) {
+  const pass = passphrase || getPassphraseFromEnv();
+  if (!pass) {
+    throw new Error(
+      'Encrypted wallet payload detected (AES-256-CBC PBKDF2 with salt/iv/encryptedData). ' +
+      'Please set WALLET_PASSPHRASE or WALLET_PASSWORD in your .env or environment so the server can decrypt your wallet.'
+    );
+  }
+
+  const saltHex = payload.salt;
+  const ivHex = payload.iv;
+  const encHex = payload.encryptedData || payload.ciphertext || payload.encrypted;
+
+  try {
+    const salt = Buffer.from(saltHex, 'hex');
+    const iv = Buffer.from(ivHex, 'hex');
+    const iterations = typeof payload.iterations === 'number' ? payload.iterations : 100000;
+    const digest = payload.digest || 'sha256';
+    const key = crypto.pbkdf2Sync(pass, salt, iterations, 32, digest);
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    let decrypted = decipher.update(encHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted.trim();
+  } catch (err) {
+    throw new Error(
+      `Failed to decrypt wallet payload: ${err.message}. Please verify that WALLET_PASSPHRASE or WALLET_PASSWORD is correct.`
+    );
+  }
+}
+
+function parseKeypairFromInput(input, passphrase) {
   if (!input) throw new Error('Empty wallet input');
 
   if (input instanceof Keypair) return input;
@@ -241,14 +302,19 @@ function parseKeypairFromInput(input) {
     return createKeypairFromBytes(input);
   }
 
-  // Object structures (e.g. { _keypair: ... }, { secretKey: ... }, numeric keys { "0": 1, ... })
+  // Object structures (e.g. encrypted payload, { _keypair: ... }, { secretKey: ... }, numeric keys { "0": 1, ... })
   if (typeof input === 'object' && input !== null) {
+    if (isEncryptedWalletPayload(input)) {
+      const decryptedStr = decryptWalletPayload(input, passphrase);
+      return parseKeypairFromInput(decryptedStr, passphrase);
+    }
+
     if (input._keypair) {
-      return parseKeypairFromInput(input._keypair);
+      return parseKeypairFromInput(input._keypair, passphrase);
     }
     const val = input.secretKey || input.privateKey || input.seed || input.key || input.secret || input.data;
     if (val) {
-      return parseKeypairFromInput(val);
+      return parseKeypairFromInput(val, passphrase);
     }
 
     // Check for object with numeric keys (e.g. {"0": 12, "1": 34, ...} from serialized Buffer/Uint8Array)
@@ -271,7 +337,7 @@ function parseKeypairFromInput(input) {
       }
       if (typeof nestedVal === 'string' && nestedVal.length >= 32) {
         try {
-          return parseKeypairFromInput(nestedVal);
+          return parseKeypairFromInput(nestedVal, passphrase);
         } catch (_) {}
       }
     }
@@ -294,17 +360,25 @@ function parseKeypairFromInput(input) {
       try {
         if (fs.existsSync(str)) {
           const content = fs.readFileSync(str, 'utf8').trim();
-          return parseKeypairFromInput(content);
+          return parseKeypairFromInput(content, passphrase);
         }
-      } catch (_) {}
+      } catch (pathErr) {
+        if (pathErr.message && (pathErr.message.includes('Encrypted wallet') || pathErr.message.includes('Failed to decrypt wallet'))) {
+          throw pathErr;
+        }
+      }
     }
 
     // JSON array or JSON object string
     if ((str.startsWith('[') && str.endsWith(']')) || (str.startsWith('{') && str.endsWith('}'))) {
       try {
         const parsed = JSON.parse(str);
-        return parseKeypairFromInput(parsed);
-      } catch (_) {}
+        return parseKeypairFromInput(parsed, passphrase);
+      } catch (jsonErr) {
+        if (jsonErr.message && (jsonErr.message.includes('Encrypted wallet') || jsonErr.message.includes('Failed to decrypt wallet'))) {
+          throw jsonErr;
+        }
+      }
     }
 
     // Hex string (0x... or pure hex)
@@ -2094,6 +2168,9 @@ module.exports = {
   parseKeypairFromInput,
   createKeypairFromBytes,
   decodeBase58,
+  decryptWalletPayload,
+  isEncryptedWalletPayload,
+  getPassphraseFromEnv,
   repairAndSanitizeIdl,
   createMinimalJupiterIdl,
   KEYPAIR_PATH,
