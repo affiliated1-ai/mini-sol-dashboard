@@ -24,6 +24,7 @@ const {
   SystemProgram,
   SYSVAR_RENT_PUBKEY, 
   Transaction,
+  TransactionInstruction,
   ComputeBudgetProgram 
 } = require('@solana/web3.js');
 const { 
@@ -781,14 +782,22 @@ function repairAndSanitizeIdl(rawIdl) {
  * Used as an infallible fallback if a downloaded IDL has irrecoverable syntax errors.
  */
 function createMinimalJupiterIdl() {
-  const coreParamsFields = [
-    { name: 'priceSlippage', type: 'u64' },
-    { name: 'collateralDelta', type: 'u64' },
+  const increaseParamsFields = [
     { name: 'sizeUsdDelta', type: 'u64' },
+    { name: 'collateralTokenDelta', type: 'u64' },
     { name: 'side', type: { defined: 'Side' } },
-    { name: 'requestType', type: { defined: 'RequestType' } },
-    { name: 'counter', type: 'u64' },
+    { name: 'priceSlippage', type: 'u64' },
     { name: 'jupiterMinimumOut', type: { option: 'u64' } },
+    { name: 'counter', type: 'u64' },
+  ];
+
+  const decreaseParamsFields = [
+    { name: 'collateralUsdDelta', type: 'u64' },
+    { name: 'sizeUsdDelta', type: 'u64' },
+    { name: 'priceSlippage', type: 'u64' },
+    { name: 'jupiterMinimumOut', type: { option: 'u64' } },
+    { name: 'entirePosition', type: { option: 'bool' } },
+    { name: 'counter', type: 'u64' },
   ];
 
   return {
@@ -799,16 +808,15 @@ function createMinimalJupiterIdl() {
       {
         name: 'createIncreasePositionMarketRequest',
         accounts: [
-          { name: 'owner', isMut: false, isSigner: true },
-          { name: 'fundingAccount', isMut: true, isSigner: false, isWritable: true },
-          { name: 'receivingAccount', isMut: true, isSigner: false, isOptional: true, isWritable: true },
-          { name: 'perpetuals', isMut: true, isSigner: false, isWritable: true },
-          { name: 'pool', isMut: true, isSigner: false, isWritable: true },
-          { name: 'position', isMut: true, isSigner: false, isWritable: true },
-          { name: 'positionRequest', isMut: true, isSigner: false, isWritable: true },
-          { name: 'positionRequestAta', isMut: true, isSigner: false, isWritable: true },
-          { name: 'custody', isMut: true, isSigner: false, isWritable: true },
-          { name: 'collateralCustody', isMut: true, isSigner: false, isWritable: true },
+          { name: 'owner', isMut: true, isSigner: true },
+          { name: 'fundingAccount', isMut: true, isSigner: false },
+          { name: 'perpetuals', isMut: false, isSigner: false },
+          { name: 'pool', isMut: false, isSigner: false },
+          { name: 'position', isMut: true, isSigner: false },
+          { name: 'positionRequest', isMut: true, isSigner: false },
+          { name: 'positionRequestAta', isMut: true, isSigner: false },
+          { name: 'custody', isMut: false, isSigner: false },
+          { name: 'collateralCustody', isMut: false, isSigner: false },
           { name: 'inputMint', isMut: false, isSigner: false },
           { name: 'referral', isMut: false, isSigner: false, isOptional: true },
           { name: 'tokenProgram', isMut: false, isSigner: false },
@@ -819,6 +827,30 @@ function createMinimalJupiterIdl() {
         ],
         args: [
           { name: 'params', type: { defined: 'CreateIncreasePositionMarketRequestParams' } },
+        ],
+      },
+      {
+        name: 'createDecreasePositionMarketRequest',
+        accounts: [
+          { name: 'owner', isMut: true, isSigner: true },
+          { name: 'receivingAccount', isMut: true, isSigner: false },
+          { name: 'perpetuals', isMut: false, isSigner: false },
+          { name: 'pool', isMut: false, isSigner: false },
+          { name: 'position', isMut: false, isSigner: false },
+          { name: 'positionRequest', isMut: true, isSigner: false },
+          { name: 'positionRequestAta', isMut: true, isSigner: false },
+          { name: 'custody', isMut: false, isSigner: false },
+          { name: 'collateralCustody', isMut: false, isSigner: false },
+          { name: 'desiredMint', isMut: false, isSigner: false },
+          { name: 'referral', isMut: false, isSigner: false, isOptional: true },
+          { name: 'tokenProgram', isMut: false, isSigner: false },
+          { name: 'associatedTokenProgram', isMut: false, isSigner: false },
+          { name: 'systemProgram', isMut: false, isSigner: false },
+          { name: 'eventAuthority', isMut: false, isSigner: false },
+          { name: 'program', isMut: false, isSigner: false },
+        ],
+        args: [
+          { name: 'params', type: { defined: 'CreateDecreasePositionMarketRequestParams' } },
         ],
       },
       {
@@ -922,11 +954,11 @@ function createMinimalJupiterIdl() {
     types: [
       {
         name: 'Side',
-        type: { kind: 'enum', variants: [{ name: 'Long' }, { name: 'Short' }] },
+        type: { kind: 'enum', variants: [{ name: 'None' }, { name: 'Long' }, { name: 'Short' }] },
       },
       {
         name: 'side',
-        type: { kind: 'enum', variants: [{ name: 'Long' }, { name: 'Short' }] },
+        type: { kind: 'enum', variants: [{ name: 'None' }, { name: 'Long' }, { name: 'Short' }] },
       },
       {
         name: 'RequestType',
@@ -938,31 +970,39 @@ function createMinimalJupiterIdl() {
       },
       {
         name: 'CreateIncreasePositionMarketRequestParams',
-        type: { kind: 'struct', fields: coreParamsFields },
+        type: { kind: 'struct', fields: increaseParamsFields },
       },
       {
         name: 'createIncreasePositionMarketRequestParams',
-        type: { kind: 'struct', fields: coreParamsFields },
+        type: { kind: 'struct', fields: increaseParamsFields },
+      },
+      {
+        name: 'CreateDecreasePositionMarketRequestParams',
+        type: { kind: 'struct', fields: decreaseParamsFields },
+      },
+      {
+        name: 'createDecreasePositionMarketRequestParams',
+        type: { kind: 'struct', fields: decreaseParamsFields },
       },
       {
         name: 'OpenPositionRequestParams',
-        type: { kind: 'struct', fields: coreParamsFields },
+        type: { kind: 'struct', fields: increaseParamsFields },
       },
       {
         name: 'openPositionRequestParams',
-        type: { kind: 'struct', fields: coreParamsFields },
+        type: { kind: 'struct', fields: increaseParamsFields },
       },
       {
         name: 'Params',
-        type: { kind: 'struct', fields: coreParamsFields },
+        type: { kind: 'struct', fields: increaseParamsFields },
       },
       {
         name: 'params',
-        type: { kind: 'struct', fields: coreParamsFields },
+        type: { kind: 'struct', fields: increaseParamsFields },
       },
       {
         name: 'PARAMS',
-        type: { kind: 'struct', fields: coreParamsFields },
+        type: { kind: 'struct', fields: increaseParamsFields },
       },
     ],
   };
@@ -1042,11 +1082,15 @@ function getProgram() {
 // -- PDA derivation ------------------------------------------------
 /**
  * Derives the Position PDA using Jupiter's exact on-chain seeds:
- * [b"position", owner, pool, custody, Buffer.from([sideByte])]
+ * [b"position", owner, pool, custody, collateralCustody, Buffer.from([sideByte])]
  * sideByte: 1 for Long, 2 for Short
  */
-function derivePositionPDA(owner, pool, custody, sideOrCollateral, explicitSide) {
-  let sideVal = explicitSide !== undefined ? explicitSide : sideOrCollateral;
+function derivePositionPDA(owner, pool, custody, collateralCustodyOrSide, explicitSide) {
+  let collateralCustody = custody;
+  let sideVal = explicitSide !== undefined ? explicitSide : collateralCustodyOrSide;
+  if (explicitSide !== undefined && collateralCustodyOrSide instanceof PublicKey) {
+    collateralCustody = collateralCustodyOrSide;
+  }
   let sideByte = 1;
   if (typeof sideVal === 'number') {
     sideByte = sideVal;
@@ -1061,6 +1105,7 @@ function derivePositionPDA(owner, pool, custody, sideOrCollateral, explicitSide)
       owner.toBuffer(),
       pool.toBuffer(),
       custody.toBuffer(),
+      collateralCustody.toBuffer(),
       Buffer.from([sideByte]),
     ],
     PERP_PROGRAM_ID
@@ -1069,20 +1114,218 @@ function derivePositionPDA(owner, pool, custody, sideOrCollateral, explicitSide)
 
 /**
  * Derives the PositionRequest PDA:
- * [b"position_request", position, counter (u64 LE Buffer)]
+ * [b"position_request", position, counter (u64 LE Buffer), Buffer.from([requestChangeByte])]
+ * requestChange: 1 for Increase, 2 for Decrease
  */
-function derivePositionRequestPDA(positionPubkey, counter) {
+function derivePositionRequestPDA(positionPubkey, counter, requestChange) {
   const counterBigInt = BigInt(counter !== undefined ? counter : 1);
   const counterBuf = Buffer.alloc(8);
   counterBuf.writeBigUInt64LE(counterBigInt, 0);
+
+  let reqChangeByte = 1;
+  if (requestChange !== undefined) {
+    if (typeof requestChange === 'number') {
+      reqChangeByte = requestChange;
+    } else if (typeof requestChange === 'string') {
+      const rc = requestChange.toLowerCase();
+      reqChangeByte = (rc.includes('decrease') || rc.includes('close') || rc.includes('short') || rc.includes('sell') || rc.includes('sl') || rc.includes('tp')) ? 2 : 1;
+    }
+  }
+
   return PublicKey.findProgramAddressSync(
     [
       Buffer.from('position_request'),
       positionPubkey.toBuffer(),
       counterBuf,
+      Buffer.from([reqChangeByte]),
     ],
     PERP_PROGRAM_ID
   );
+}
+
+/**
+ * Exact manual Borsh instruction encoder for Jupiter Perpetuals createIncreasePositionMarketRequest.
+ * Guarantees 100% byte-for-byte serialization accuracy:
+ * Discriminator: sha256("global:create_increase_position_market_request")[0..8] (0xb855c71869ab9c38)
+ * Args layout (CreateIncreasePositionMarketRequestParams):
+ *   1. sizeUsdDelta: u64 (8 bytes LE)
+ *   2. collateralTokenDelta: u64 (8 bytes LE)
+ *   3. side: Side enum (1 byte: 1 for Long, 2 for Short)
+ *   4. priceSlippage: u64 (8 bytes LE)
+ *   5. jupiterMinimumOut: Option<u64> (1 byte flag + 8 bytes LE if Some)
+ *   6. counter: u64 (8 bytes LE)
+ */
+function createIncreasePositionMarketRequestInstruction({
+  owner,
+  fundingAccount,
+  perpetuals,
+  pool,
+  position,
+  positionRequest,
+  positionRequestAta,
+  custody,
+  collateralCustody,
+  inputMint,
+  referral,
+  sizeUsdDelta,
+  collateralTokenDelta,
+  side,
+  priceSlippage,
+  jupiterMinimumOut,
+  counter
+}) {
+  const disc = crypto.createHash('sha256').update('global:create_increase_position_market_request').digest().slice(0, 8);
+
+  const sizeBuf = Buffer.alloc(8);
+  sizeBuf.writeBigUInt64LE(BigInt(sizeUsdDelta || 0));
+
+  const colBuf = Buffer.alloc(8);
+  colBuf.writeBigUInt64LE(BigInt(collateralTokenDelta || 0));
+
+  let sideByte = 1;
+  if (typeof side === 'number') {
+    sideByte = side;
+  } else if (typeof side === 'string') {
+    const s = side.toLowerCase();
+    sideByte = (s === 'long' || s === 'green' || s === 'buy') ? 1 : 2;
+  } else if (side && typeof side === 'object') {
+    sideByte = side.long || side.Long ? 1 : 2;
+  }
+  const sideBuf = Buffer.from([sideByte]);
+
+  const slipBuf = Buffer.alloc(8);
+  slipBuf.writeBigUInt64LE(BigInt(priceSlippage || 0));
+
+  let minOutBuf;
+  if (jupiterMinimumOut !== null && jupiterMinimumOut !== undefined) {
+    minOutBuf = Buffer.alloc(9);
+    minOutBuf.writeUInt8(1, 0);
+    minOutBuf.writeBigUInt64LE(BigInt(jupiterMinimumOut), 1);
+  } else {
+    minOutBuf = Buffer.from([0]);
+  }
+
+  const countBuf = Buffer.alloc(8);
+  countBuf.writeBigUInt64LE(BigInt(counter !== undefined ? counter : 1));
+
+  const data = Buffer.concat([disc, sizeBuf, colBuf, sideBuf, slipBuf, minOutBuf, countBuf]);
+
+  const [eventAuthority] = PublicKey.findProgramAddressSync(
+    [Buffer.from('__event_authority')],
+    PERP_PROGRAM_ID
+  );
+
+  const keys = [
+    { pubkey: owner, isSigner: true, isWritable: true },
+    { pubkey: fundingAccount, isSigner: false, isWritable: true },
+    { pubkey: perpetuals, isSigner: false, isWritable: false },
+    { pubkey: pool, isSigner: false, isWritable: false },
+    { pubkey: position, isSigner: false, isWritable: true },
+    { pubkey: positionRequest, isSigner: false, isWritable: true },
+    { pubkey: positionRequestAta, isSigner: false, isWritable: true },
+    { pubkey: custody, isSigner: false, isWritable: false },
+    { pubkey: collateralCustody, isSigner: false, isWritable: false },
+    { pubkey: inputMint, isSigner: false, isWritable: false },
+    { pubkey: referral || PERP_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: eventAuthority, isSigner: false, isWritable: false },
+    { pubkey: PERP_PROGRAM_ID, isSigner: false, isWritable: false },
+  ];
+
+  return new TransactionInstruction({
+    programId: PERP_PROGRAM_ID,
+    keys,
+    data,
+  });
+}
+
+/**
+ * Exact manual Borsh instruction encoder for Jupiter Perpetuals createDecreasePositionMarketRequest.
+ */
+function createDecreasePositionMarketRequestInstruction({
+  owner,
+  receivingAccount,
+  perpetuals,
+  pool,
+  position,
+  positionRequest,
+  positionRequestAta,
+  custody,
+  collateralCustody,
+  desiredMint,
+  referral,
+  collateralUsdDelta,
+  sizeUsdDelta,
+  priceSlippage,
+  jupiterMinimumOut,
+  entirePosition,
+  counter
+}) {
+  const disc = crypto.createHash('sha256').update('global:create_decrease_position_market_request').digest().slice(0, 8);
+
+  const colBuf = Buffer.alloc(8);
+  colBuf.writeBigUInt64LE(BigInt(collateralUsdDelta || 0));
+
+  const sizeBuf = Buffer.alloc(8);
+  sizeBuf.writeBigUInt64LE(BigInt(sizeUsdDelta || 0));
+
+  const slipBuf = Buffer.alloc(8);
+  slipBuf.writeBigUInt64LE(BigInt(priceSlippage || 0));
+
+  let minOutBuf;
+  if (jupiterMinimumOut !== null && jupiterMinimumOut !== undefined) {
+    minOutBuf = Buffer.alloc(9);
+    minOutBuf.writeUInt8(1, 0);
+    minOutBuf.writeBigUInt64LE(BigInt(jupiterMinimumOut), 1);
+  } else {
+    minOutBuf = Buffer.from([0]);
+  }
+
+  let entBuf;
+  if (entirePosition !== null && entirePosition !== undefined) {
+    entBuf = Buffer.alloc(2);
+    entBuf.writeUInt8(1, 0);
+    entBuf.writeUInt8(entirePosition ? 1 : 0, 1);
+  } else {
+    entBuf = Buffer.from([0]);
+  }
+
+  const countBuf = Buffer.alloc(8);
+  countBuf.writeBigUInt64LE(BigInt(counter !== undefined ? counter : 1));
+
+  const data = Buffer.concat([disc, colBuf, sizeBuf, slipBuf, minOutBuf, entBuf, countBuf]);
+
+  const [eventAuthority] = PublicKey.findProgramAddressSync(
+    [Buffer.from('__event_authority')],
+    PERP_PROGRAM_ID
+  );
+
+  const keys = [
+    { pubkey: owner, isSigner: true, isWritable: true },
+    { pubkey: receivingAccount, isSigner: false, isWritable: true },
+    { pubkey: perpetuals, isSigner: false, isWritable: false },
+    { pubkey: pool, isSigner: false, isWritable: false },
+    { pubkey: position, isSigner: false, isWritable: false },
+    { pubkey: positionRequest, isSigner: false, isWritable: true },
+    { pubkey: positionRequestAta, isSigner: false, isWritable: true },
+    { pubkey: custody, isSigner: false, isWritable: false },
+    { pubkey: collateralCustody, isSigner: false, isWritable: false },
+    { pubkey: desiredMint, isSigner: false, isWritable: false },
+    { pubkey: referral || PERP_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: eventAuthority, isSigner: false, isWritable: false },
+    { pubkey: PERP_PROGRAM_ID, isSigner: false, isWritable: false },
+  ];
+
+  return new TransactionInstruction({
+    programId: PERP_PROGRAM_ID,
+    keys,
+    data,
+  });
 }
 
 // -- Open Position (Real Anchor On-Chain Flow) -----------------------
@@ -1122,7 +1365,7 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
 
   // 2. PositionRequest PDA
   const counter = Date.now() % 2**32;
-  const [positionRequestPDA] = derivePositionRequestPDA(positionPDA, counter);
+  const [positionRequestPDA] = derivePositionRequestPDA(positionPDA, counter, 1);
 
   const positionRequestATA = await getAssociatedTokenAddress(
     collateralMint,
@@ -1389,29 +1632,25 @@ async function placeLimitOrder({ asset, side, marginUSDC, limitPrice, leverage, 
     let tx = null;
 
     try {
-      openIx = await methodBuilder
-        .accounts(accountsMap)
-        .instruction();
-
-      // Ensure state PDAs are explicitly marked isWritable: true in the instruction keys array
-      // Prevents: "writable privilege escalated / Cross-program invocation with unauthorized signer or writable account"
-      const writablePubkeys = new Set([
-        perpetualsPDA.toBase58(),
-        JLP_POOL.toBase58(),
-        custody.toBase58(),
-        collateralCustody.toBase58(),
-        positionPDA.toBase58(),
-        positionRequestPDA.toBase58(),
-        positionRequestATA.toBase58(),
-        traderCollateralATA.toBase58(),
-      ]);
-      if (openIx && Array.isArray(openIx.keys)) {
-        for (const meta of openIx.keys) {
-          if (writablePubkeys.has(meta.pubkey.toBase58())) {
-            meta.isWritable = true;
-          }
-        }
-      }
+      openIx = createIncreasePositionMarketRequestInstruction({
+        owner,
+        fundingAccount: traderCollateralATA,
+        perpetuals: perpetualsPDA,
+        pool: JLP_POOL,
+        position: positionPDA,
+        positionRequest: positionRequestPDA,
+        positionRequestAta: positionRequestATA,
+        custody,
+        collateralCustody,
+        inputMint: collateralMint,
+        referral: PERP_PROGRAM_ID,
+        sizeUsdDelta: sizeUsdDeltaAtomic,
+        collateralTokenDelta: collateralDeltaAtomic,
+        side: normSide,
+        priceSlippage: priceSlippageAtomic,
+        jupiterMinimumOut: null,
+        counter,
+      });
 
       tx = new Transaction();
 
@@ -1547,7 +1786,7 @@ async function placeTriggerRequest(positionPDA, type, triggerPrice, side, asset,
 
   const program = getProgram();
   const counter = (Date.now() % 2**32) + (type === 'tp' ? 1 : 2);
-  const [triggerRequestPDA] = derivePositionRequestPDA(positionPDA, counter);
+  const [triggerRequestPDA] = derivePositionRequestPDA(positionPDA, counter, 2);
   const collateralMint = getCollateralMint(asset, side);
   const triggerPriceAtomic = Math.round(triggerPrice * 1e6);
 
@@ -1942,7 +2181,7 @@ async function closePosition(positionPubkey) {
   const collateralCustody = getCollateralCustody(asset, side);
   const collateralMint    = getCollateralMint(asset, side);
   const counter           = Date.now() % 2**32;
-  const [closeRequestPDA] = derivePositionRequestPDA(pk, counter);
+  const [closeRequestPDA] = derivePositionRequestPDA(pk, counter, 2);
 
   const closeRequestATA = await getAssociatedTokenAddress(collateralMint, closeRequestPDA, true);
   const traderATA       = await getAssociatedTokenAddress(collateralMint, kp.publicKey, false);
@@ -2097,28 +2336,25 @@ async function closePosition(positionPubkey) {
       entire_position: true,
     };
 
-    const closeIx = await program.methods[targetIxName](paramsObj)
-      .accounts(accountsMap)
-      .instruction();
-
-    // Ensure state PDAs are explicitly marked isWritable: true in the closeIx keys array
-    const writablePubkeys = new Set([
-      perpetualsPDA.toBase58(),
-      JLP_POOL.toBase58(),
-      custody.toBase58 ? custody.toBase58() : custody.toString(),
-      collateralCustody.toBase58(),
-      pk.toBase58(),
-      closeRequestPDA.toBase58(),
-      closeRequestATA.toBase58(),
-      traderATA.toBase58(),
-    ]);
-    if (closeIx && Array.isArray(closeIx.keys)) {
-      for (const meta of closeIx.keys) {
-        if (writablePubkeys.has(meta.pubkey.toBase58())) {
-          meta.isWritable = true;
-        }
-      }
-    }
+    const closeIx = createDecreasePositionMarketRequestInstruction({
+      owner: kp.publicKey,
+      receivingAccount: traderATA,
+      perpetuals: perpetualsPDA,
+      pool: JLP_POOL,
+      position: pk,
+      positionRequest: closeRequestPDA,
+      positionRequestAta: closeRequestATA,
+      custody: new PublicKey(custody),
+      collateralCustody,
+      desiredMint: collateralMint,
+      referral: PERP_PROGRAM_ID,
+      collateralUsdDelta: 0,
+      sizeUsdDelta: 0,
+      priceSlippage: 0,
+      jupiterMinimumOut: null,
+      entirePosition: true,
+      counter,
+    });
 
     tx.add(closeIx);
 
@@ -2165,6 +2401,8 @@ module.exports = {
   getProgram,
   derivePositionPDA,
   derivePositionRequestPDA,
+  createIncreasePositionMarketRequestInstruction,
+  createDecreasePositionMarketRequestInstruction,
   parseKeypairFromInput,
   createKeypairFromBytes,
   decodeBase58,
