@@ -138,12 +138,55 @@ function getCollateralCustody(asset, side) {
   return side === 'Long' ? CUSTODY_ACCOUNTS[asset] : CUSTODY_ACCOUNTS.USDC;
 }
 
-// -- Keypair Helper Functions (Handles both 64-byte keys and 32-byte seeds) --
+// -- Keypair Helper Functions (Handles all formats: 64-byte secret key, 32-byte seed, Base58, Hex, JSON objects) --
+const B58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const B58_MAP = {};
+for (let i = 0; i < B58_ALPHABET.length; i++) {
+  B58_MAP[B58_ALPHABET.charAt(i)] = i;
+}
+
+function decodeBase58(string) {
+  if (!string || string.length === 0) return new Uint8Array(0);
+  const bytes = [0];
+  for (let i = 0; i < string.length; i++) {
+    const c = string[i];
+    if (!(c in B58_MAP)) throw new Error('Non-base58 character: ' + c);
+    for (let j = 0; j < bytes.length; j++) bytes[j] *= 58;
+    bytes[0] += B58_MAP[c];
+    let carry = 0;
+    for (let j = 0; j < bytes.length; ++j) {
+      bytes[j] += carry;
+      carry = bytes[j] >> 8;
+      bytes[j] &= 0xff;
+    }
+    while (carry) {
+      bytes.push(carry & 0xff);
+      carry >>= 8;
+    }
+  }
+  for (let i = 0; string[i] === '1' && i < string.length - 1; i++) {
+    bytes.push(0);
+  }
+  return new Uint8Array(bytes.reverse());
+}
+
 function createKeypairFromBytes(bytes) {
   if (!bytes) {
     throw new Error('Keypair data is empty or null');
   }
-  const u8 = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
+
+  let rawArr;
+  if (bytes instanceof Uint8Array || Buffer.isBuffer(bytes)) {
+    rawArr = Array.from(bytes);
+  } else if (Array.isArray(bytes)) {
+    rawArr = bytes
+      .map(x => (typeof x === 'string' ? parseInt(x.trim(), 10) : Number(x)))
+      .filter(n => !isNaN(n));
+  } else {
+    rawArr = Array.from(bytes);
+  }
+
+  const u8 = new Uint8Array(rawArr);
 
   // Standard Solana 64-byte secret key (32-byte seed + 32-byte public key)
   if (u8.length === 64) {
@@ -190,23 +233,73 @@ function parseKeypairFromInput(input) {
 
   if (input instanceof Keypair) return input;
 
-  if (input instanceof Uint8Array || Buffer.isBuffer(input) || Array.isArray(input)) {
+  if (input instanceof Uint8Array || Buffer.isBuffer(input)) {
     return createKeypairFromBytes(input);
   }
 
-  if (typeof input === 'object') {
-    const val = input.secretKey || input.privateKey || input.seed || input.key || input.secret;
+  if (Array.isArray(input)) {
+    return createKeypairFromBytes(input);
+  }
+
+  // Object structures (e.g. { _keypair: ... }, { secretKey: ... }, numeric keys { "0": 1, ... })
+  if (typeof input === 'object' && input !== null) {
+    if (input._keypair) {
+      return parseKeypairFromInput(input._keypair);
+    }
+    const val = input.secretKey || input.privateKey || input.seed || input.key || input.secret || input.data;
     if (val) {
       return parseKeypairFromInput(val);
+    }
+
+    // Check for object with numeric keys (e.g. {"0": 12, "1": 34, ...} from serialized Buffer/Uint8Array)
+    const keys = Object.keys(input);
+    if (keys.length >= 32 && keys.every(k => !isNaN(parseInt(k, 10)))) {
+      const arr = [];
+      for (let i = 0; i < keys.length; i++) {
+        const item = input[i] !== undefined ? input[i] : input[String(i)];
+        arr.push(typeof item === 'string' ? parseInt(item.trim(), 10) : Number(item));
+      }
+      return createKeypairFromBytes(arr);
+    }
+
+    // Check if any object value is an array of numbers or secret key
+    for (const nestedVal of Object.values(input)) {
+      if (Array.isArray(nestedVal) && nestedVal.length >= 32) {
+        try {
+          return createKeypairFromBytes(nestedVal);
+        } catch (_) {}
+      }
+      if (typeof nestedVal === 'string' && nestedVal.length >= 32) {
+        try {
+          return parseKeypairFromInput(nestedVal);
+        } catch (_) {}
+      }
     }
   }
 
   if (typeof input === 'string') {
     let str = input.trim();
-    if ((str.startsWith('"') && str.endsWith('"')) || (str.startsWith("'") && str.endsWith("'"))) {
+
+    // Unwrap multiple enclosing quotes or backticks: e.g. "\"\"[1, 2, ...]\"\""
+    while (
+      (str.startsWith('"') && str.endsWith('"')) ||
+      (str.startsWith("'") && str.endsWith("'")) ||
+      (str.startsWith('`') && str.endsWith('`'))
+    ) {
       str = str.slice(1, -1).trim();
     }
 
+    // Check if it's a file path
+    if (fs.existsSync && (str.endsWith('.json') || str.startsWith('./') || str.startsWith('/') || str.startsWith('~'))) {
+      try {
+        if (fs.existsSync(str)) {
+          const content = fs.readFileSync(str, 'utf8').trim();
+          return parseKeypairFromInput(content);
+        }
+      } catch (_) {}
+    }
+
+    // JSON array or JSON object string
     if ((str.startsWith('[') && str.endsWith(']')) || (str.startsWith('{') && str.endsWith('}'))) {
       try {
         const parsed = JSON.parse(str);
@@ -214,33 +307,77 @@ function parseKeypairFromInput(input) {
       } catch (_) {}
     }
 
-    // Try Base58 decoding (Phantom, Solflare string)
-    try {
-      const rawBs58 = require('bs58');
-      const bs58 = rawBs58.default || rawBs58;
-      const decoded = bs58.decode(str);
-      if (decoded && (decoded.length === 32 || decoded.length === 64 || decoded.length > 32)) {
-        return createKeypairFromBytes(decoded);
-      }
-    } catch (_) {}
-
-    // Try Hex decoding
-    if (/^[0-9a-fA-F]+$/.test(str) && (str.length === 64 || str.length === 128)) {
+    // Hex string (0x... or pure hex)
+    let hexCandidate = str;
+    if (hexCandidate.startsWith('0x') || hexCandidate.startsWith('0X')) {
+      hexCandidate = hexCandidate.slice(2);
+    }
+    if (/^[0-9a-fA-F]+$/.test(hexCandidate) && (hexCandidate.length === 64 || hexCandidate.length === 128)) {
       try {
-        const buf = Buffer.from(str, 'hex');
+        const buf = Buffer.from(hexCandidate, 'hex');
         return createKeypairFromBytes(buf);
       } catch (_) {}
     }
 
-    // Try comma-separated integers: "12,34,56,..."
+    // Comma-separated integers: "12, 34, 56, ..."
     if (str.includes(',')) {
       try {
-        const nums = str.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+        const nums = str
+          .replace(/[\[\]]/g, '')
+          .split(',')
+          .map(s => parseInt(s.trim(), 10))
+          .filter(n => !isNaN(n));
         if (nums.length >= 32) {
           return createKeypairFromBytes(nums);
         }
       } catch (_) {}
     }
+
+    // Space/newline-separated integers: "12 34 56 ..."
+    if (/\s+/.test(str)) {
+      const parts = str
+        .split(/\s+/)
+        .map(s => parseInt(s.trim(), 10))
+        .filter(n => !isNaN(n));
+      if (parts.length >= 32) {
+        try {
+          return createKeypairFromBytes(parts);
+        } catch (_) {}
+      }
+    }
+
+    // Base58 decoding (Phantom, Solflare, CLI Base58 string)
+    // Clean string by removing any internal whitespace or newlines
+    const cleanB58 = str.replace(/\s+/g, '');
+    try {
+      // 1. Try Anchor's built-in bs58
+      if (anchor && anchor.utils && anchor.utils.bytes && anchor.utils.bytes.bs58) {
+        const decoded = anchor.utils.bytes.bs58.decode(cleanB58);
+        if (decoded && decoded.length >= 32) {
+          return createKeypairFromBytes(decoded);
+        }
+      }
+    } catch (_) {}
+
+    try {
+      // 2. Try raw bs58 library
+      const rawBs58 = require('bs58');
+      const bs58 = rawBs58.default || rawBs58;
+      if (bs58 && typeof bs58.decode === 'function') {
+        const decoded = bs58.decode(cleanB58);
+        if (decoded && decoded.length >= 32) {
+          return createKeypairFromBytes(decoded);
+        }
+      }
+    } catch (_) {}
+
+    try {
+      // 3. Built-in zero-dependency Base58 decoder fallback
+      const decoded = decodeBase58(cleanB58);
+      if (decoded && decoded.length >= 32) {
+        return createKeypairFromBytes(decoded);
+      }
+    } catch (_) {}
   }
 
   throw new Error('Unsupported wallet keypair format. Provide a 32-byte seed or 64-byte secret key (as JSON array, Base58 string, or object).');
@@ -1607,7 +1744,7 @@ async function cancelOrder(positionRequestPubkey) {
     const asset     = Object.entries(CUSTODY_ACCOUNTS).find(([,v]) => v.toBase58() === custody.toBase58())?.[0] || 'SOL';
 
     const collateralCustody = getCollateralCustody(asset, side);
-    const [positionPDA]     = derivePositionPDA(kp.publicKey, JLP_POOL, new PublicKey(custody), collateralCustody);
+    const [positionPDA]     = derivePositionPDA(kp.publicKey, JLP_POOL, new PublicKey(custody), collateralCustody, side);
     const collateralMint    = getCollateralMint(asset, side);
     const positionRequestATA = await getAssociatedTokenAddress(collateralMint, pk, true);
 
@@ -1954,6 +2091,9 @@ module.exports = {
   getProgram,
   derivePositionPDA,
   derivePositionRequestPDA,
+  parseKeypairFromInput,
+  createKeypairFromBytes,
+  decodeBase58,
   repairAndSanitizeIdl,
   createMinimalJupiterIdl,
   KEYPAIR_PATH,
