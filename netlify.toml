@@ -1,3 +1,0 @@
-[dev]
-  port = 3001        # The port you want to open in your browser
-  targetPort = 3001  # The port your underlying framework
